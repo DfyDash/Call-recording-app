@@ -38,6 +38,9 @@ phase 2). This phase proves the pipeline works end to end for one account.
   transcription via AWS Transcribe (`TRANSCRIPTION_ENABLED=true`), a
   meaningful undercut of GHL's own transcription fee — see "Call
   transcription" below.
+- `src/backfill.js` — one-off/on-demand script that walks a sub-account's
+  entire call history (the live poller deliberately doesn't) — see
+  "Historical backfill" below.
 
 Built on Node/Express/Postgres so it can move to AWS (API Gateway + Lambda
 or ECS, RDS, S3) later without a re-platform — the eventual HIPAA-compliant
@@ -126,6 +129,36 @@ The vendor call is isolated behind `src/transcription.js`'s
 swapping providers later (Deepgram once/if its BAA process is sorted, or
 anything else) only means writing a new module behind the same interface,
 not touching the poller or API routes that call it.
+
+## Historical backfill
+
+GHL lets sub-accounts turn on auto-deleting call recordings after N days
+(default 90) to control their own storage bill, and that setting reportedly
+can't be turned back off once enabled. The live poller (`src/poller.js`)
+deliberately starts watching from "now" on first run rather than walking
+the whole account, so on its own it wouldn't catch anything recorded before
+CallTrove was installed — a real gap once a customer flips that switch on.
+
+`src/backfill.js` (`npm run backfill`) closes that gap: it walks the
+account's *entire* conversation history, oldest calls first (so if it gets
+interrupted partway, whatever's closest to falling out of GHL's retention
+window is already saved), through the same download/tag/store pipeline the
+live poller uses. It's safe to run more than once or alongside the live
+poller — `calls.ghl_call_id` is unique, so anything already captured is
+just skipped.
+
+It deliberately does **not** auto-transcribe what it finds. Storing the raw
+backfilled recordings is essentially free (~1MB/min of audio costs a
+fraction of a cent/month on S3, so backfilling years of history is a
+non-issue), but transcribing all of it would not be — at AWS Transcribe's
+rate, a 10,000-minute backlog is a real ~$240 one-time bill. Historical
+transcription is left as a deliberate, separate opt-in rather than a
+silent side effect of "go save everything before it's deleted."
+
+Run this once per sub-account at onboarding, or any time before telling a
+customer it's safe to turn GHL's auto-delete setting on. It can only save
+what GHL still has — anything already past the deletion window before this
+runs is unrecoverable.
 
 ## Definition of done for this phase
 

@@ -61,6 +61,14 @@ async function markCallStored(callId, storageKey) {
   );
 }
 
+// Cheap existence check for src/backfill.js -- lets it skip already-captured
+// calls (from a prior run, or ones the live poller already picked up) without
+// going through insertCall's conflict-and-discard path just to find out.
+async function getCallByGhlId(ghlCallId) {
+  const { rows } = await pool.query(`SELECT id FROM calls WHERE ghl_call_id = $1`, [ghlCallId]);
+  return rows[0] || null;
+}
+
 async function markCallFailed(callId) {
   await pool.query(
     `UPDATE calls SET recording_status = 'failed' WHERE id = $1`,
@@ -240,6 +248,7 @@ module.exports = {
   pool,
   upsertContact,
   insertCall,
+  getCallByGhlId,
   markCallStored,
   markCallFailed,
   markTranscriptionPending,

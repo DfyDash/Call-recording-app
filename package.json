@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "migrate": "node src/db/migrate.js"
+    "migrate": "node src/db/migrate.js",
+    "backfill": "node src/backfill.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.626.0",

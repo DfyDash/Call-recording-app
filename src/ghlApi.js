@@ -31,6 +31,27 @@ async function searchConversations(limit = 100) {
   return data.conversations || [];
 }
 
+// One page of the full conversation history, oldest-sortable via cursor
+// (startAfterDate/startAfterId, echoing the last conversation of the
+// previous page) -- for src/backfill.js, which has to walk the *entire*
+// account history rather than just the most recent page (what
+// searchConversations above is for). Returns the raw conversations array;
+// the caller decides whether another page follows (fewer than `limit`
+// results back means this was the last page).
+async function searchConversationsPage({ limit = 100, sort = "asc", startAfterDate, startAfterId } = {}) {
+  const url = new URL(`${GHL_API_BASE}/conversations/search`);
+  url.searchParams.set("locationId", process.env.GHL_LOCATION_ID);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("sort", sort);
+  url.searchParams.set("sortBy", "last_message_date");
+  if (startAfterDate) url.searchParams.set("startAfterDate", String(startAfterDate));
+  if (startAfterId) url.searchParams.set("startAfterId", startAfterId);
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) throw new Error(`conversations/search (paginated) failed with status ${res.status}`);
+  const data = await res.json();
+  return data.conversations || [];
+}
+
 // Every call-type message in a conversation (GHL mixes calls, SMS, emails,
 // etc. into the same message list).
 async function listCallMessages(conversationId) {
@@ -106,6 +127,7 @@ async function listUsers() {
 module.exports = {
   isConfigured,
   searchConversations,
+  searchConversationsPage,
   listCallMessages,
   downloadRecording,
   getUserName,

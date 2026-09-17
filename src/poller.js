@@ -15,7 +15,12 @@ const CONVERSATIONS_PER_POLL = 100;
 // instead of GHL's ambiguous timezone-less strings, handled-by/duration/
 // direction straight from the API instead of depending on a hand-built
 // webhook JSON body) and needs zero manual setup in GHL per account.
-async function processCallMessage(conversation, message) {
+// autoTranscribe defaults on for the live poller (new calls trickling in one
+// at a time), but src/backfill.js passes false: transcribing an entire
+// historical backlog automatically could be a real one-time bill (~$0.024/min
+// on AWS Transcribe), not something to kick off silently as a side effect of
+// "go save everything before GHL deletes it".
+async function processCallMessage(conversation, message, { autoTranscribe = true } = {}) {
   const contactId = conversation.contactId;
   if (!contactId) return;
 
@@ -57,7 +62,7 @@ async function processCallMessage(conversation, message) {
     await db.markCallStored(callRowId, key);
     console.log(`[poller] stored recording for call ${message.id}`);
 
-    if (transcription.isEnabled()) {
+    if (autoTranscribe && transcription.isEnabled()) {
       try {
         await transcription.startJob(callRowId, taggedBuffer, extension);
         await db.markTranscriptionPending(callRowId);
@@ -121,4 +126,4 @@ function start() {
   }, POLL_INTERVAL_MS);
 }
 
-module.exports = { start, pollOnce };
+module.exports = { start, pollOnce, processCallMessage };
