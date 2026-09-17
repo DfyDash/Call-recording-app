@@ -55,11 +55,36 @@ async function insertCall({
   return result.rows[0] || null;
 }
 
-async function markCallStored(callId, storageKey) {
-  await pool.query(
-    `UPDATE calls SET storage_key = $2, recording_status = 'stored' WHERE id = $1`,
-    [callId, storageKey]
+async function markCallStored(callId, storageKey, durationSeconds) {
+  if (durationSeconds !== undefined && durationSeconds !== null) {
+    await pool.query(
+      `UPDATE calls SET storage_key = $2, recording_status = 'stored', duration_seconds = $3 WHERE id = $1`,
+      [callId, storageKey, durationSeconds]
+    );
+  } else {
+    await pool.query(
+      `UPDATE calls SET storage_key = $2, recording_status = 'stored' WHERE id = $1`,
+      [callId, storageKey]
+    );
+  }
+}
+
+// Calls the live poller marked 'failed' recently -- GHL sometimes hasn't
+// finished processing a call's recording (or even its final duration) at
+// the moment the poller first sees the message (see src/poller.js's
+// retryFailedRecordings), so these are worth one more look rather than
+// treated as permanently missing the way an old backfilled call is.
+async function listRetryableFailedCalls(maxAgeMs) {
+  const { rows } = await pool.query(
+    `SELECT c.id, c.ghl_call_id AS "ghlCallId", c.ghl_contact_id AS "contactId", c.raw_payload AS "rawPayload",
+            c.direction, c.occurred_at AS "occurredAt",
+            ct.name AS "contactName", ct.phone AS "contactPhone"
+     FROM calls c
+     LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     WHERE c.recording_status = 'failed' AND c.occurred_at > now() - ($1 || ' milliseconds')::interval`,
+    [maxAgeMs]
   );
+  return rows;
 }
 
 // Cheap existence check for src/backfill.js -- lets it skip already-captured
@@ -391,6 +416,7 @@ module.exports = {
   getCallByGhlId,
   markCallStored,
   markCallFailed,
+  listRetryableFailedCalls,
   markTranscriptionPending,
   markTranscriptionComplete,
   markTranscriptionFailed,

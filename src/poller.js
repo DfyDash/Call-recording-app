@@ -8,6 +8,17 @@ const transcription = require("./transcription");
 const POLL_INTERVAL_MS = 60 * 1000;
 const CONVERSATIONS_PER_POLL = 100;
 
+// GHL sometimes hasn't finished processing a call's recording -- or even
+// settled its final duration -- at the moment the poller first sees the
+// message (confirmed: a message caught seconds after the call started can
+// read status "ringing" with duration null; the same message returns a
+// real recording minutes later). A one-shot lookup right after the call
+// permanently mislabels those as having no recording at all. So a call
+// marked 'failed' gets one more look on every poll cycle for this long
+// before being treated as genuinely missing, the way an old backfilled
+// call is.
+const FAILED_RECORDING_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 // Replaces the GHL "Call Completed" workflow/webhook entirely: scans for
 // new call messages via GHL's own Conversations API on a timer instead of
 // waiting for GHL to push one. This is more reliable than the webhook was
@@ -79,8 +90,59 @@ async function processCallMessage(conversation, message, { checkAutoTranscribe =
   }
 }
 
+// Re-attempts calls the live poller marked 'failed' recently, in case GHL
+// has since finished processing the recording (see the constant above for
+// why this exists). Never touches calls backfill.js inserted -- those are
+// old enough that "still processing" isn't a plausible explanation, so a
+// 'failed' there really does mean GHL has no recording for it.
+async function retryFailedRecordings(maxAgeMs = FAILED_RECORDING_RETRY_WINDOW_MS) {
+  const candidates = await db.listRetryableFailedCalls(maxAgeMs);
+
+  for (const call of candidates) {
+    const conversationId = call.rawPayload && call.rawPayload.conversationId;
+    if (!conversationId) continue;
+
+    let messages;
+    try {
+      messages = await ghlApi.listCallMessages(conversationId);
+    } catch (err) {
+      console.error(`[poller] retry: failed to list messages for call ${call.ghlCallId}:`, err);
+      continue;
+    }
+    const message = messages.find((m) => m.id === call.ghlCallId);
+    if (!message) continue;
+
+    const status = message.meta && message.meta.call && message.meta.call.status;
+    if (status === "ringing") continue; // call not actually finished yet, try again next cycle
+
+    try {
+      const recording = await ghlApi.downloadRecording(call.ghlCallId);
+      const extension = recording.contentType.includes("wav") ? "wav" : "mp3";
+      const durationSeconds = (message.meta && message.meta.call && message.meta.call.duration) || null;
+      const taggedBuffer = embedMetadata(recording.buffer, extension, {
+        occurredAt: call.occurredAt,
+        direction: call.direction,
+        durationSeconds,
+        contactName: call.contactName,
+        phone: call.contactPhone,
+        timezone: await ghlApi.getAccountTimezone(),
+      });
+      const key = `${call.contactId}/${call.id}.${extension}`;
+      await saveRecording(key, taggedBuffer);
+      await db.markCallStored(call.id, key, durationSeconds);
+      console.log(`[poller] retry succeeded for call ${call.ghlCallId} (recording was still processing)`);
+    } catch (err) {
+      // Still not ready, or genuinely never going to have one -- leave it
+      // 'failed'; either the next cycle catches it or the retry window
+      // above eventually lets it settle as a real miss.
+    }
+  }
+}
+
 async function pollOnce() {
   if (!ghlApi.isConfigured()) return;
+
+  await retryFailedRecordings();
 
   let checkpoint = await db.getLastSyncedAt();
   if (!checkpoint) {
@@ -129,4 +191,4 @@ function start() {
   }, POLL_INTERVAL_MS);
 }
 
-module.exports = { start, pollOnce, processCallMessage };
+module.exports = { start, pollOnce, processCallMessage, retryFailedRecordings };
