@@ -21,9 +21,18 @@ function pick(obj, paths) {
   return null;
 }
 
+// GHL sends some call timestamps as "YYYY-MM-DD HH:MM:SS" with no timezone
+// indicator, in the sub-account's configured local time rather than UTC.
+// Date() otherwise misinterprets that as UTC, silently shifting it by the
+// account's offset (confirmed 7 hours off against this account's MST setup).
+const NAIVE_LOCAL_DATE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+
 function parseDate(value) {
   if (isBlank(value)) return null;
-  const date = new Date(value);
+  const normalized = NAIVE_LOCAL_DATE.test(value)
+    ? `${value.replace(" ", "T")}${process.env.GHL_ACCOUNT_UTC_OFFSET || "-07:00"}`
+    : value;
+  const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
