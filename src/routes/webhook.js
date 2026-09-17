@@ -2,6 +2,7 @@ const express = require("express");
 const { randomUUID } = require("crypto");
 const db = require("../db");
 const { saveRecording } = require("../storage");
+const ghlApi = require("../ghlApi");
 
 const router = express.Router();
 
@@ -168,16 +169,37 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
       return res.status(200).json({ status: "duplicate", ghlCallId: parsed.callId });
     }
 
-    if (!parsed.recordingUrl) {
+    if (!parsed.recordingUrl && !ghlApi.isConfigured()) {
       console.warn(`[webhook] no recording URL for call ${parsed.callId}, metadata stored without audio`);
       return res.status(200).json({ status: "stored_without_recording", callId: callRowId });
     }
 
     try {
-      const response = await fetch(parsed.recordingUrl);
-      if (!response.ok) throw new Error(`fetch failed with status ${response.status}`);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const key = `${parsed.contactId}/${callRowId}.${extensionFromUrl(parsed.recordingUrl)}`;
+      let buffer;
+      let extension = "mp3";
+
+      if (parsed.recordingUrl) {
+        const response = await fetch(parsed.recordingUrl);
+        if (!response.ok) throw new Error(`fetch failed with status ${response.status}`);
+        buffer = Buffer.from(await response.arrayBuffer());
+        extension = extensionFromUrl(parsed.recordingUrl);
+      } else {
+        // The Call Completed trigger has no recording-URL merge field at all
+        // (confirmed against GHL's docs), so look it up via GHL's own API
+        // using the contact + call time we do have.
+        const recording = await ghlApi.findCallRecording({
+          contactId: parsed.contactId,
+          occurredAt: parsed.occurredAt,
+        });
+        if (!recording) {
+          console.warn(`[webhook] could not locate recording via GHL API for call ${parsed.callId}`);
+          return res.status(200).json({ status: "stored_without_recording", callId: callRowId });
+        }
+        buffer = recording.buffer;
+        extension = recording.contentType.includes("wav") ? "wav" : "mp3";
+      }
+
+      const key = `${parsed.contactId}/${callRowId}.${extension}`;
       await saveRecording(key, buffer);
       await db.markCallStored(callRowId, key);
       return res.status(200).json({ status: "ok", callId: callRowId });
