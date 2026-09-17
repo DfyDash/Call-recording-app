@@ -73,4 +73,29 @@ async function findCallRecording({ contactId, occurredAt }) {
   return fetchRecording(messageId);
 }
 
-module.exports = { isConfigured, findCallRecording };
+// Cached for the process lifetime -- a sub-account's timezone essentially
+// never changes, and this saves an API call on every single webhook.
+let cachedTimezone = null;
+
+// Fetches the sub-account's actual configured timezone (an IANA name like
+// "America/Phoenix") so call timestamps display correctly for whichever
+// account this is deployed against, including DST, instead of relying on a
+// hand-configured fixed UTC offset that only happens to be right for one
+// account and one season.
+async function getAccountTimezone() {
+  if (cachedTimezone) return cachedTimezone;
+  if (!isConfigured()) return null;
+
+  const url = `${GHL_API_BASE}/locations/${process.env.GHL_LOCATION_ID}`;
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) {
+    console.warn(`[ghlApi] could not fetch location timezone, status ${res.status}`);
+    return null;
+  }
+  const data = await res.json();
+  const timezone = (data.location && data.location.timezone) || data.timezone || null;
+  if (timezone) cachedTimezone = timezone;
+  return timezone;
+}
+
+module.exports = { isConfigured, findCallRecording, getAccountTimezone };

@@ -7,6 +7,10 @@ const { embedMetadata } = require("../audioMetadata");
 
 const router = express.Router();
 
+// Fallback only for when the account's real timezone couldn't be looked up.
+// See audioMetadata.js's copy of this same constant for why.
+const DEFAULT_TIMEZONE = "America/Phoenix";
+
 // GHL renders an unresolved merge tag as the literal text "null" (or
 // "undefined") rather than omitting the key, so those must be treated the
 // same as a genuinely missing value.
@@ -24,23 +28,59 @@ function pick(obj, paths) {
 
 // GHL sends some call timestamps as "YYYY-MM-DD HH:MM:SS" with no timezone
 // indicator, in the sub-account's configured local time rather than UTC.
-// Date() otherwise misinterprets that as UTC, silently shifting it by the
-// account's offset (confirmed 7 hours off against this account's MST setup).
-const NAIVE_LOCAL_DATE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+// Date() otherwise misinterprets that as UTC, silently shifting it by
+// whatever the account's real offset is. Convert using the account's actual
+// IANA timezone (not a fixed offset) so this is correct for any account and
+// handles DST properly.
+const NAIVE_LOCAL_DATE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 
-function parseDate(value) {
+function zonedTimeToUtc(year, month, day, hour, minute, second, timeZone) {
+  // Treat the naive components as if they were UTC to get a reference
+  // instant, then see what that instant renders as *in* the target
+  // timezone -- the difference is exactly that zone's offset at that
+  // moment (DST included), which corrects the reference into the real
+  // UTC instant the original wall-clock time actually represents.
+  const asIfUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(new Date(asIfUtc))
+      .map((p) => [p.type, p.value])
+  );
+  const renderedAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) === 24 ? 0 : Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
+  return new Date(asIfUtc + (asIfUtc - renderedAsUtc));
+}
+
+function parseDate(value, timeZone) {
   if (isBlank(value)) return null;
-  const normalized = NAIVE_LOCAL_DATE.test(value)
-    ? `${value.replace(" ", "T")}${process.env.GHL_ACCOUNT_UTC_OFFSET || "-07:00"}`
-    : value;
-  const date = new Date(normalized);
+  const naive = NAIVE_LOCAL_DATE.exec(value);
+  if (naive) {
+    const [, year, month, day, hour, minute, second] = naive.map(Number);
+    return zonedTimeToUtc(year, month, day, hour, minute, second, timeZone || DEFAULT_TIMEZONE);
+  }
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
 // GHL's exact field names vary by trigger/version, so we check several
 // known variants. Log the raw payload regardless so real field names can
 // be confirmed against a live "Call Completed" webhook during setup.
-function normalizePayload(body) {
+function normalizePayload(body, timezone) {
   const contactId = pick(body, ["contact_id", "contactId", "contact.id"]);
   const name = pick(body, [
     "contact_name",
@@ -107,7 +147,7 @@ function normalizePayload(body) {
   ]);
 
   const resolvedContactId = contactId ? String(contactId) : null;
-  const resolvedOccurredAt = parseDate(occurredAt);
+  const resolvedOccurredAt = parseDate(occurredAt, timezone);
 
   // GHL's "Call Completed" trigger has no dedicated call ID merge field.
   // Derive a stable one from contact + call time instead, so retries of the
@@ -149,7 +189,8 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
   console.log("[webhook] received payload:", JSON.stringify(req.body));
 
   try {
-    const parsed = normalizePayload(req.body);
+    const timezone = (await ghlApi.getAccountTimezone()) || DEFAULT_TIMEZONE;
+    const parsed = normalizePayload(req.body, timezone);
 
     if (!parsed.contactId || !parsed.callId) {
       console.warn("[webhook] missing contactId/callId, check field names against raw payload above");
@@ -216,6 +257,7 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
         durationSeconds: parsed.durationSeconds,
         contactName: parsed.name,
         phone: parsed.phone,
+        timezone,
       });
 
       const key = `${parsed.contactId}/${callRowId}.${extension}`;

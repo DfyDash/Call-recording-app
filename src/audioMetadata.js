@@ -1,40 +1,47 @@
 const NodeID3 = require("node-id3");
 
+// Fallback only for when the account's real timezone couldn't be looked up
+// (e.g. GHL API not configured, or the lookup failed). Matches this
+// deployment's confirmed account; a different deployment should get its own
+// real timezone from ghlApi.getAccountTimezone() rather than rely on this.
+const DEFAULT_TIMEZONE = "America/Phoenix";
+
 // occurredAt is always stored as a true UTC instant, but a timestamp shown
 // to a human (in the file's own metadata, where nothing can auto-adjust for
 // the viewer the way a browser does) needs to be in the account's own
 // timezone -- otherwise a call at 9pm local shows as the next day in UTC,
 // which is exactly backwards for someone trying to find "that 9pm call".
-function parseOffsetMinutes(offset) {
-  const match = /^([+-])(\d{2}):(\d{2})$/.exec(offset);
-  if (!match) return 0;
-  const sign = match[1] === "-" ? -1 : 1;
-  return sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10));
-}
-
-function toAccountLocal(date) {
-  const offset = process.env.GHL_ACCOUNT_UTC_OFFSET || "-07:00";
-  const shifted = new Date(date.getTime() + parseOffsetMinutes(offset) * 60000);
-  const hours = parseOffsetMinutes(offset) / 60;
-  return { shifted, offsetLabel: `UTC${hours >= 0 ? "+" : ""}${hours}` };
-}
-
-function formatTimestamp(date) {
-  const { shifted, offsetLabel } = toAccountLocal(date);
-  let hours = shifted.getUTCHours();
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  const minutes = String(shifted.getUTCMinutes()).padStart(2, "0");
-  const datePart = shifted.toISOString().slice(0, 10);
+// Using the account's actual IANA timezone (rather than a fixed offset)
+// also means daylight saving transitions are handled correctly.
+function formatTimestamp(date, timeZone) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone || DEFAULT_TIMEZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZoneName: "shortOffset",
+    })
+      .formatToParts(date)
+      .map((p) => [p.type, p.value])
+  );
+  const offsetLabel = (parts.timeZoneName || "").replace("GMT", "UTC");
   // "2026-09-16 9:57 PM (UTC-7)" -- readable, and shows up wherever Title
   // does, since many basic file-properties viewers (unlike this app's own
   // dashboard) don't surface a Comment/Date field at all.
-  return `${datePart} ${hours}:${minutes} ${ampm} (${offsetLabel})`;
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.dayPeriod} (${offsetLabel})`;
 }
 
-function buildComment({ occurredAt, direction, durationSeconds, contactName, phone }) {
+function localDateOnly(date, timeZone) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timeZone || DEFAULT_TIMEZONE }).format(date);
+}
+
+function buildComment({ occurredAt, direction, durationSeconds, contactName, phone, timezone }) {
   const parts = [];
-  if (occurredAt) parts.push(`Recorded: ${formatTimestamp(occurredAt)}`);
+  if (occurredAt) parts.push(`Recorded: ${formatTimestamp(occurredAt, timezone)}`);
   if (direction) parts.push(`Direction: ${direction}`);
   if (durationSeconds != null) parts.push(`Duration: ${durationSeconds}s`);
   const who = contactName || phone;
@@ -42,10 +49,10 @@ function buildComment({ occurredAt, direction, durationSeconds, contactName, pho
   return parts.join(" | ");
 }
 
-function buildTitle({ occurredAt, contactName, phone, direction }) {
+function buildTitle({ occurredAt, contactName, phone, direction, timezone }) {
   const who = contactName || phone || "unknown contact";
   const base = direction ? `Call with ${who} (${direction})` : `Call with ${who}`;
-  return occurredAt ? `${formatTimestamp(occurredAt)} - ${base}` : base;
+  return occurredAt ? `${formatTimestamp(occurredAt, timezone)} - ${base}` : base;
 }
 
 // --- WAV: inject a RIFF LIST/INFO chunk (read by Explorer/Finder/most players) ---
@@ -91,7 +98,7 @@ function embedWavMetadata(buffer, meta) {
   }
 
   const fields = {
-    ICRD: meta.occurredAt ? toAccountLocal(meta.occurredAt).shifted.toISOString().slice(0, 10) : null,
+    ICRD: meta.occurredAt ? localDateOnly(meta.occurredAt, meta.timezone) : null,
     INAM: buildTitle(meta),
     ICMT: buildComment(meta),
     IART: meta.contactName || meta.phone || null,
