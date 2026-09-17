@@ -7,13 +7,10 @@ const { verifyPassword, hashPassword, sessionUser } = require("../auth");
 const router = express.Router();
 
 // Scoped to the login route specifically -- this is the actual
-// brute-force target, not the rest of the app. Keyed by IP (the default),
-// so it won't lock out other users sharing an office/VPN egress on its own
-// -- 20 attempts per 15 minutes is generous for a real user, tight for a
-// password-guessing script.
+// brute-force target, not the rest of the app. Keyed by IP (the default).
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
+  windowMs: 30 * 60 * 1000,
+  limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
 });
