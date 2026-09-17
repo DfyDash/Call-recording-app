@@ -153,6 +153,10 @@ audio {
   font-size: 0.85rem;
 }
 
+.account-success {
+  color: #16794f;
+}
+
 .session-bar {
   display: flex;
   align-items: center;

@@ -14,7 +14,7 @@ async function loadSession() {
   const res = await fetch("/api/me");
   const me = await res.json();
   const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a>` : "";
-  sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink}</span>
+  sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink} · <a href="/account.html">Change password</a></span>
     <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
 
   if (me.role === "admin") await loadViewAsOptions();

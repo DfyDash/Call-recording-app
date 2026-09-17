@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Change Password — Call Recording Vault</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="admin-page">
+    <div id="session-bar" class="session-bar"></div>
+    <h1>Change password</h1>
+    <p><a href="/">&larr; Back to dashboard</a></p>
+
+    <div id="success-message" class="login-error account-success" hidden>Password changed.</div>
+    <div id="error-message" class="login-error" hidden></div>
+
+    <form method="POST" action="/auth/change-password" class="login-card">
+      <label>
+        Current password
+        <input type="password" name="currentPassword" autocomplete="current-password" required />
+      </label>
+      <label>
+        New password
+        <input type="password" name="newPassword" autocomplete="new-password" minlength="8" required />
+      </label>
+      <label>
+        Confirm new password
+        <input type="password" name="confirmPassword" autocomplete="new-password" minlength="8" required />
+      </label>
+      <button type="submit">Change password</button>
+    </form>
+  </div>
+  <script src="account.js"></script>
+</body>
+</html>
