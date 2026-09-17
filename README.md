@@ -352,6 +352,12 @@ runs is unrecoverable.
   at their admin. Once SES is in, add a real "Forgot password?" link/flow
   on `login.html` itself (request → emailed reset link → new password),
   replacing that admin-only fallback.
+- OTP login option (a code via text or email as a second factor / login
+  method). Email side rides on SES, same as forgot-password above. Text
+  side needs **AWS End User Messaging SMS** -- the current name for what
+  used to be under Amazon Pinpoint; Pinpoint itself is being retired
+  October 30, 2026, but its SMS/voice/OTP APIs continue under this new
+  name, unaffected. OTP is a named, supported use case for that service.
 
 ## Moving to AWS
 
