@@ -39,14 +39,25 @@ function normalizePayload(body) {
   ]) || [pick(body, ["first_name", "contact.first_name"]), pick(body, ["last_name", "contact.last_name"])]
     .filter(Boolean)
     .join(" ") || null;
-  const phone = pick(body, ["phone", "contact.phone"]);
-  const callId = pick(body, ["call_id", "callId", "id", "message_id", "messageId"]);
-  const direction = pick(body, ["direction", "call_direction", "callDirection"]);
-  const duration = pick(body, ["duration", "call_duration", "durationInSeconds", "callDuration"]);
+  const phone = pick(body, ["phone", "contact.phone", "message.phone"]);
+  // GHL models calls as Conversation "messages" internally, so call data is
+  // often exposed under message.* merge tags rather than call.* ones.
+  const callId = pick(body, ["call_id", "callId", "id", "message_id", "messageId", "message.id"]);
+  const direction = pick(body, ["direction", "call_direction", "callDirection", "message.direction"]);
+  const duration = pick(body, [
+    "duration",
+    "call_duration",
+    "durationInSeconds",
+    "callDuration",
+    "message.duration",
+  ]);
   const recordingUrl = pick(body, [
     "recording_url",
     "recordingUrl",
     "call_recording_url",
+    "message.recording_url",
+    "message.recordingUrl",
+    "message.attachments.0",
     "attachments.0",
   ]);
   const occurredAt = pick(body, [
@@ -55,6 +66,8 @@ function normalizePayload(body) {
     "dateAdded",
     "call_date",
     "callDate",
+    "message.dateAdded",
+    "message.date_added",
   ]);
 
   return {
