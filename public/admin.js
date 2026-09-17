@@ -58,9 +58,20 @@ autoTranscribeToggle.addEventListener("change", async () => {
   loadAuditLog();
 });
 
+let ghlUsers = [];
+
+function ghlUserOptionsHtml(selectedId) {
+  let html = `<option value="">(none)</option>`;
+  for (const u of ghlUsers) {
+    const label = `${u.name || "(no name)"}${u.email ? ` — ${u.email}` : ""}`;
+    html += `<option value="${escapeHtml(u.id)}" ${u.id === selectedId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+  }
+  return html;
+}
+
 async function loadGhlUsers() {
   const res = await fetch("/api/admin/ghl-users");
-  const ghlUsers = await res.json();
+  ghlUsers = await res.json();
   for (const u of ghlUsers) {
     const option = document.createElement("option");
     option.value = u.id;
@@ -79,8 +90,10 @@ async function loadUsers() {
     tr.innerHTML = `
       <td>${escapeHtml(user.username)}</td>
       <td>${escapeHtml(user.role)}</td>
-      <td>${escapeHtml(user.ghlUserName || "-")}</td>
-      <td>${escapeHtml(user.ghlUserId || "-")}</td>
+      <td>
+        <select class="ghl-link-select">${ghlUserOptionsHtml(user.ghlUserId)}</select>
+        <button data-id="${user.id}" class="link-ghl-btn">Save</button>
+      </td>
       <td>
         <button data-id="${user.id}" class="reset-btn">Reset password</button>
         <button data-id="${user.id}" class="delete-btn">Delete</button>
@@ -88,6 +101,10 @@ async function loadUsers() {
     `;
     tr.querySelector(".delete-btn").addEventListener("click", () => deleteUser(user.id, user.username));
     tr.querySelector(".reset-btn").addEventListener("click", () => resetPassword(user.id, user.username));
+    tr.querySelector(".link-ghl-btn").addEventListener("click", () => {
+      const select = tr.querySelector(".ghl-link-select");
+      linkGhlUser(user.id, select.value || null);
+    });
     userRows.appendChild(tr);
   }
 }
@@ -111,6 +128,22 @@ async function resetPassword(id, username) {
     return;
   }
   alert(`New password for "${username}":\n\n${newPassword}\n\nSend this to them securely -- it won't be shown again.`);
+  loadAuditLog();
+}
+
+async function linkGhlUser(id, ghlUserId) {
+  const ghlUser = ghlUsers.find((u) => u.id === ghlUserId);
+  const res = await fetch(`/api/admin/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+    body: JSON.stringify({ ghlUserId, ghlUserName: ghlUser ? ghlUser.name || ghlUser.email || ghlUser.id : null }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.error || "could not update GHL link");
+    return;
+  }
+  loadUsers();
   loadAuditLog();
 }
 
@@ -191,6 +224,5 @@ addUserForm.addEventListener("submit", async (e) => {
 });
 
 loadSession();
-loadGhlUsers();
-loadUsers();
+loadGhlUsers().then(loadUsers);
 loadAuditLog();

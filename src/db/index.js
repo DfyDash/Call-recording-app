@@ -330,11 +330,15 @@ async function listAuditLog({ page = 1, pageSize = 50 } = {}) {
   const { rows: countRows } = await pool.query(`SELECT COUNT(*) FROM audit_log`);
   const total = Number(countRows[0].count);
 
+  // COALESCE to the GHL name currently linked to the actor's user account,
+  // falling back to the username recorded at the time (matters once that
+  // link changes, or if the account has since been deleted).
   const { rows } = await pool.query(
-    `SELECT id, actor_id AS "actorId", actor_username AS "actorUsername", action, message,
-            created_at AS "createdAt"
-     FROM audit_log
-     ORDER BY created_at DESC
+    `SELECT l.id, l.actor_id AS "actorId", COALESCE(u.ghl_user_name, l.actor_username) AS "actorUsername",
+            l.action, l.message, l.created_at AS "createdAt"
+     FROM audit_log l
+     LEFT JOIN users u ON u.id = l.actor_id
+     ORDER BY l.created_at DESC
      LIMIT $1 OFFSET $2`,
     [size, (pageNum - 1) * size]
   );
@@ -360,15 +364,19 @@ async function listPhiAccessLog({ page = 1, pageSize = 50 } = {}) {
   const { rows: countRows } = await pool.query(`SELECT COUNT(*) FROM phi_access_log`);
   const total = Number(countRows[0].count);
 
-  // LEFT JOINs purely for display (which contact this call belongs to) --
-  // the log itself never depends on the call or contact still existing.
+  // LEFT JOINs purely for display -- which contact this call belongs to,
+  // and the GHL name currently linked to the accessing user's account
+  // (falling back to the username recorded at the time). The log itself
+  // never depends on any of these still existing.
   const { rows } = await pool.query(
-    `SELECT l.id, l.user_id AS "userId", l.username, l.action, l.call_id AS "callId", l.success,
+    `SELECT l.id, l.user_id AS "userId", COALESCE(u.ghl_user_name, l.username) AS username,
+            l.action, l.call_id AS "callId", l.success,
             l.denial_reason AS "denialReason", l.ip_address AS "ipAddress", l.user_agent AS "userAgent",
             l.created_at AS "createdAt", ct.name AS "contactName", ct.phone AS "contactPhone"
      FROM phi_access_log l
      LEFT JOIN calls c ON c.id = l.call_id
      LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     LEFT JOIN users u ON u.id = l.user_id
      ORDER BY l.created_at DESC
      LIMIT $1 OFFSET $2`,
     [size, (pageNum - 1) * size]
