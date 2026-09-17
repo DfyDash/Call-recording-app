@@ -9,7 +9,9 @@
 //
 // Transcription is on-demand only, everywhere (see routes/api.js's POST
 // /calls/:id/transcribe) -- this never triggers it either. Run it with
-// node src/backfill.js (or npm run backfill).
+// node src/backfill.js (or npm run backfill), or from the admin UI's
+// "Run historical backfill" button (routes/admin.js), which imports and
+// calls `run` directly instead of shelling out.
 
 require("dotenv").config();
 const db = require("./db");
@@ -86,15 +88,31 @@ async function run() {
     if (conversations.length < PAGE_SIZE) break; // short page = last page
   }
 
+  const summary = {
+    conversationsSeen,
+    callsFound,
+    callsSaved,
+    callsSkipped,
+    callsFailed,
+  };
   console.log(
     `[backfill] done. conversations scanned: ${conversationsSeen}, call messages found: ${callsFound}, ` +
       `saved: ${callsSaved}, already had: ${callsSkipped}, failed: ${callsFailed}`
   );
+  return summary;
 }
 
-run()
-  .catch((err) => {
-    console.error("[backfill] fatal error:", err);
-    process.exitCode = 1;
-  })
-  .finally(() => db.pool.end());
+module.exports = { run };
+
+// Only run immediately (and close the shared DB pool afterward) when
+// invoked directly as `node src/backfill.js` -- routes/admin.js also
+// imports `run` to offer this from the admin UI, and closing the pool
+// there would take down the whole app's database connection.
+if (require.main === module) {
+  run()
+    .catch((err) => {
+      console.error("[backfill] fatal error:", err);
+      process.exitCode = 1;
+    })
+    .finally(() => db.pool.end());
+}

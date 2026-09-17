@@ -26,6 +26,20 @@
     </div>
 
     <div class="settings-section">
+      <h2>Historical backfill</h2>
+      <p class="settings-note">
+        Walks the account's entire call history and captures anything not
+        already here. Useful after a gap, or before turning on GHL's
+        auto-delete for call recordings -- run this first so nothing is
+        lost. Can take anywhere from under a minute to over an hour
+        depending on call volume; runs in the background, so it's safe to
+        navigate away.
+      </p>
+      <button type="button" id="run-backfill-btn" class="button-link">Run historical backfill</button>
+      <p class="settings-note" id="backfill-status"></p>
+    </div>
+
+    <div class="settings-section">
       <h2>Export</h2>
       <p class="settings-note">
         Download every stored recording as one ZIP file, organized by

@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const archiver = require("archiver");
 const db = require("../db");
 const ghlApi = require("../ghlApi");
+const backfill = require("../backfill");
 const { getBuffer } = require("../storage");
 const { hashPassword, requireAdmin, requireCsrf } = require("../auth");
 const { loginLimiter, limiterKey } = require("./auth");
@@ -134,6 +135,48 @@ router.put("/settings", requireCsrf, async (req, res) => {
   await db.setAutoTranscribeEnabled(enabled);
   await log(req, "auto_transcribe_toggled", `Turned automatic transcription ${enabled ? "ON" : "OFF"}`);
   res.json({ autoTranscribeEnabled: enabled });
+});
+
+// Historical backfill, on demand from the admin UI instead of someone
+// having to SSH/SSM in and run `node src/backfill.js` by hand. Runs in the
+// background (a full account history walk can take anywhere from under a
+// minute to over an hour) -- the response returns immediately, and the
+// frontend polls GET /backfill for progress. In-memory only: it doesn't
+// need to survive a restart, and a restart mid-run just means the next
+// run picks up where the last one left off (backfill skips calls it
+// already has).
+let backfillState = { running: false, lastResult: null, lastError: null, startedAt: null, finishedAt: null };
+
+router.get("/backfill", async (req, res) => {
+  res.json(backfillState);
+});
+
+router.post("/backfill", requireCsrf, async (req, res) => {
+  if (backfillState.running) {
+    return res.status(409).json({ error: "a backfill is already running" });
+  }
+  backfillState = { running: true, lastResult: null, lastError: null, startedAt: new Date(), finishedAt: null };
+  await log(req, "backfill_started", "Started a historical call backfill");
+
+  backfill
+    .run()
+    .then(async (summary) => {
+      backfillState = { ...backfillState, running: false, lastResult: summary, finishedAt: new Date() };
+      await log(
+        req,
+        "backfill_completed",
+        `Backfill finished: ${summary.callsSaved} call${summary.callsSaved === 1 ? "" : "s"} saved, ` +
+          `${summary.callsSkipped} already had, ${summary.callsFailed} failed to process ` +
+          `(${summary.conversationsSeen} conversations scanned)`
+      );
+    })
+    .catch(async (err) => {
+      console.error("[admin] backfill failed:", err);
+      backfillState = { ...backfillState, running: false, lastError: err.message, finishedAt: new Date() };
+      await log(req, "backfill_failed", `Backfill failed: ${err.message}`);
+    });
+
+  res.status(202).json(backfillState);
 });
 
 router.get("/audit-log", async (req, res) => {

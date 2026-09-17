@@ -9,8 +9,11 @@ const auditRows = document.getElementById("audit-rows");
 const auditPrevBtn = document.getElementById("audit-prev-btn");
 const auditNextBtn = document.getElementById("audit-next-btn");
 const auditPageIndicator = document.getElementById("audit-page-indicator");
+const runBackfillBtn = document.getElementById("run-backfill-btn");
+const backfillStatus = document.getElementById("backfill-status");
 let auditPage = 1;
 let csrfToken = "";
+let backfillPollTimer = null;
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -42,6 +45,52 @@ async function loadSettings() {
   const settings = await res.json();
   autoTranscribeToggle.checked = !!settings.autoTranscribeEnabled;
 }
+
+function renderBackfillStatus(state) {
+  if (state.running) {
+    runBackfillBtn.disabled = true;
+    runBackfillBtn.textContent = "Backfill running…";
+    backfillStatus.textContent = "This can take a while for a lot of history -- feel free to navigate away and check back.";
+    if (!backfillPollTimer) backfillPollTimer = setInterval(loadBackfillStatus, 5000);
+    return;
+  }
+  runBackfillBtn.disabled = false;
+  runBackfillBtn.textContent = "Run historical backfill";
+  if (backfillPollTimer) {
+    clearInterval(backfillPollTimer);
+    backfillPollTimer = null;
+  }
+  if (state.lastError) {
+    backfillStatus.textContent = `Last run failed: ${state.lastError}`;
+  } else if (state.lastResult) {
+    const r = state.lastResult;
+    backfillStatus.textContent =
+      `Last run: ${r.callsSaved} call${r.callsSaved === 1 ? "" : "s"} saved, ${r.callsSkipped} already had, ` +
+      `${r.callsFailed} failed to process (${r.conversationsSeen} conversations scanned).`;
+  } else {
+    backfillStatus.textContent = "";
+  }
+}
+
+async function loadBackfillStatus() {
+  const res = await fetch("/api/admin/backfill");
+  renderBackfillStatus(await res.json());
+}
+
+runBackfillBtn.addEventListener("click", async () => {
+  if (!confirm("Run a full historical backfill now? This walks the account's entire call history and can take a while for large accounts.")) return;
+  const res = await fetch("/api/admin/backfill", {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
+  if (!res.ok && res.status !== 202) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.error || "could not start backfill");
+    return;
+  }
+  renderBackfillStatus(await res.json());
+  loadAuditLog();
+});
 
 autoTranscribeToggle.addEventListener("change", async () => {
   autoTranscribeToggle.disabled = true;

@@ -397,10 +397,17 @@ audio {
 .button-link {
   display: inline-block;
   padding: 8px 14px;
+  border: none;
   border-radius: 6px;
   background: #2563eb;
   color: #fff;
   text-decoration: none;
+  font: inherit;
   font-size: 0.9rem;
   cursor: pointer;
+}
+
+.button-link:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
