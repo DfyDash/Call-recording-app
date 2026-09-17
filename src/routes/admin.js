@@ -70,4 +70,16 @@ router.delete("/users/:id", async (req, res) => {
   res.json({ status: "deleted" });
 });
 
+// Live, admin-toggleable, no redeploy needed. Only affects calls the live
+// poller picks up after this is read (see poller.js) -- never retroactive.
+router.get("/settings", async (req, res) => {
+  res.json({ autoTranscribeEnabled: await db.getAutoTranscribeEnabled() });
+});
+
+router.put("/settings", async (req, res) => {
+  const { autoTranscribeEnabled } = req.body || {};
+  await db.setAutoTranscribeEnabled(Boolean(autoTranscribeEnabled));
+  res.json({ autoTranscribeEnabled: Boolean(autoTranscribeEnabled) });
+});
+
 module.exports = router;

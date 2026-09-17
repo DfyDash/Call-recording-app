@@ -66,3 +66,16 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_synced_at  TIMESTAMPTZ,
   CONSTRAINT sync_state_single_row CHECK (id = 1)
 );
+
+-- Single-row, admin-toggleable settings (live, not env-var-gated -- flip on
+-- or off without a redeploy). auto_transcribe_enabled only affects calls
+-- the live poller picks up *after* it's checked -- src/poller.js checks it
+-- fresh per new call, and src/backfill.js never checks it at all, so
+-- historical recordings are never swept into auto-transcription by turning
+-- this on.
+CREATE TABLE IF NOT EXISTS app_settings (
+  id                       INT PRIMARY KEY DEFAULT 1,
+  auto_transcribe_enabled  BOOLEAN NOT NULL DEFAULT false,
+  CONSTRAINT app_settings_single_row CHECK (id = 1)
+);
+INSERT INTO app_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

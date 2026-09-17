@@ -3,6 +3,8 @@ const userRows = document.getElementById("user-rows");
 const addUserForm = document.getElementById("add-user-form");
 const addUserError = document.getElementById("add-user-error");
 const ghlUserSelect = document.getElementById("ghl-user-select");
+const settingsSection = document.getElementById("settings-section");
+const autoTranscribeToggle = document.getElementById("auto-transcribe-toggle");
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -23,7 +25,30 @@ async function loadSession() {
   }
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)}) · <a href="/account.html">Change password</a></span>
     <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+
+  if (me.transcriptionEnabled) await loadSettings();
 }
+
+async function loadSettings() {
+  settingsSection.hidden = false;
+  const res = await fetch("/api/admin/settings");
+  const settings = await res.json();
+  autoTranscribeToggle.checked = !!settings.autoTranscribeEnabled;
+}
+
+autoTranscribeToggle.addEventListener("change", async () => {
+  autoTranscribeToggle.disabled = true;
+  const res = await fetch("/api/admin/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ autoTranscribeEnabled: autoTranscribeToggle.checked }),
+  });
+  if (!res.ok) {
+    alert("Could not update the setting");
+    autoTranscribeToggle.checked = !autoTranscribeToggle.checked;
+  }
+  autoTranscribeToggle.disabled = false;
+});
 
 async function loadGhlUsers() {
   const res = await fetch("/api/admin/ghl-users");

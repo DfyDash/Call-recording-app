@@ -244,6 +244,19 @@ async function setLastSyncedAt(date) {
   );
 }
 
+// --- app_settings (live, admin-toggleable -- see src/poller.js) ---
+
+async function getAutoTranscribeEnabled() {
+  const { rows } = await pool.query(
+    `SELECT auto_transcribe_enabled AS "autoTranscribeEnabled" FROM app_settings WHERE id = 1`
+  );
+  return rows[0] ? rows[0].autoTranscribeEnabled : false;
+}
+
+async function setAutoTranscribeEnabled(enabled) {
+  await pool.query(`UPDATE app_settings SET auto_transcribe_enabled = $1 WHERE id = 1`, [enabled]);
+}
+
 module.exports = {
   pool,
   upsertContact,
@@ -267,4 +280,6 @@ module.exports = {
   deleteUser,
   getLastSyncedAt,
   setLastSyncedAt,
+  getAutoTranscribeEnabled,
+  setAutoTranscribeEnabled,
 };

@@ -231,6 +231,32 @@ audio {
   padding: 24px;
 }
 
+.settings-section {
+  margin: 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.settings-section h2 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.settings-note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .admin-form {
   display: flex;
   flex-wrap: wrap;

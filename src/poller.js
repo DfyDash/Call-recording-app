@@ -3,6 +3,7 @@ const db = require("./db");
 const ghlApi = require("./ghlApi");
 const { saveRecording } = require("./storage");
 const { embedMetadata } = require("./audioMetadata");
+const transcription = require("./transcription");
 
 const POLL_INTERVAL_MS = 60 * 1000;
 const CONVERSATIONS_PER_POLL = 100;
@@ -14,10 +15,15 @@ const CONVERSATIONS_PER_POLL = 100;
 // instead of GHL's ambiguous timezone-less strings, handled-by/duration/
 // direction straight from the API instead of depending on a hand-built
 // webhook JSON body) and needs zero manual setup in GHL per account.
-// Transcription is deliberately not triggered here -- it's on-demand only
-// (see routes/api.js's POST /calls/:id/transcribe), so nobody's paying to
-// transcribe calls no one ever asked to read.
-async function processCallMessage(conversation, message) {
+//
+// checkAutoTranscribe defaults off -- src/backfill.js relies on that default
+// so historical calls are never swept into auto-transcription no matter what
+// the app_settings toggle is set to. pollOnce() below, the live
+// forward-watching path, is the only caller that passes it true: the
+// auto_transcribe_enabled setting is read fresh per call here, so flipping
+// it in the admin UI affects only calls the live poller picks up from that
+// point on, never anything already in the database.
+async function processCallMessage(conversation, message, { checkAutoTranscribe = false } = {}) {
   const contactId = conversation.contactId;
   if (!contactId) return;
 
@@ -58,6 +64,15 @@ async function processCallMessage(conversation, message) {
     await saveRecording(key, taggedBuffer);
     await db.markCallStored(callRowId, key);
     console.log(`[poller] stored recording for call ${message.id}`);
+
+    if (checkAutoTranscribe && transcription.isEnabled() && (await db.getAutoTranscribeEnabled())) {
+      try {
+        await transcription.startJob(callRowId, taggedBuffer, extension);
+        await db.markTranscriptionPending(callRowId);
+      } catch (err) {
+        console.error(`[poller] failed to start auto-transcription for call ${message.id}:`, err);
+      }
+    }
   } catch (err) {
     console.error(`[poller] failed to fetch/store recording for call ${message.id}:`, err);
     await db.markCallFailed(callRowId);
@@ -92,7 +107,7 @@ async function pollOnce() {
 
   for (const { conversation, message } of newMessages) {
     try {
-      await processCallMessage(conversation, message);
+      await processCallMessage(conversation, message, { checkAutoTranscribe: true });
       checkpoint = new Date(message.dateAdded);
       await db.setLastSyncedAt(checkpoint);
     } catch (err) {

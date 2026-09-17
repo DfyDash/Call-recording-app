@@ -101,13 +101,28 @@ as the server boots with those set.
 
 ## Call transcription
 
-Optional (`TRANSCRIPTION_ENABLED=true`), via AWS Transcribe, **on-demand
-only** — a "Transcribe" button per call in the dashboard, nothing automatic.
-Most calls never get relistened to, so auto-transcribing every single one
-(the live poller's ingestion, and `src/backfill.js`'s history walk) would
-mean paying for a lot of transcripts nobody asked for. Triggering it is a
-deliberate, visible action instead, which also doubles as real cost control
-to point to when selling this.
+Optional (`TRANSCRIPTION_ENABLED=true`), via AWS Transcribe. Two ways to
+trigger it, both leading to the same pipeline:
+
+- **On-demand** — a "Transcribe" button per call in the dashboard. The
+  default, and the only option until an admin turns auto-transcription on.
+- **Automatic, opt-in** — a live toggle on **Manage users**
+  ("Automatically transcribe new calls going forward"), backed by
+  `app_settings.auto_transcribe_enabled` (no redeploy needed to flip it).
+  Once on, every call the live poller picks up gets transcribed
+  automatically. Critically, it's scoped to only calls picked up *after*
+  it's checked: `src/poller.js` reads the setting fresh per new call, and
+  `src/backfill.js` never checks it at all, so turning this on can never
+  retroactively transcribe existing recordings — including anything a
+  historical backfill just pulled in. That split matters in practice: grab
+  a customer's full history with `src/backfill.js` first (cheap, no
+  transcription), then flip auto-transcription on once they're only paying
+  for what's coming in going forward.
+
+Most calls never get relistened to, so auto-transcribing indiscriminately
+means paying for a lot of transcripts nobody asked for — on-demand stays
+the sane default, and the visible toggle doubles as a real cost-control
+story to point to when selling this.
 
 GHL charges $0.039/min for its own call transcription (confirmed directly
 in the GHL UI); AWS Transcribe's cost is ~$0.024/min, so this alone

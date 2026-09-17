@@ -12,6 +12,19 @@
     <h1>Manage users</h1>
     <p><a href="/">&larr; Back to dashboard</a></p>
 
+    <div id="settings-section" class="settings-section" hidden>
+      <h2>Transcription settings</h2>
+      <label class="toggle-row">
+        <input type="checkbox" id="auto-transcribe-toggle" />
+        Automatically transcribe new calls going forward
+      </label>
+      <p class="settings-note">
+        Only affects calls picked up from now on -- turning this on never
+        transcribes existing recordings. Anyone can still transcribe an
+        individual past call on demand from the dashboard.
+      </p>
+    </div>
+
     <table>
       <thead>
         <tr>
