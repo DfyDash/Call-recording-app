@@ -56,6 +56,24 @@
       <button type="submit">Add user</button>
       <span id="add-user-error" class="login-error" hidden></span>
     </form>
+
+    <h2>Activity log</h2>
+    <p class="settings-note">Who changed what admin setting or account, and when.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Admin</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="audit-rows"></tbody>
+    </table>
+    <div class="pagination">
+      <button type="button" id="audit-prev-btn">&larr; Prev</button>
+      <span id="audit-page-indicator"></span>
+      <button type="button" id="audit-next-btn">Next &rarr;</button>
+    </div>
   </div>
   <script src="admin.js"></script>
 </body>

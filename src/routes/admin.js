@@ -8,6 +8,10 @@ const router = express.Router();
 
 router.use(requireAdmin);
 
+function log(req, action, message) {
+  return db.logAudit({ actorId: req.session.user.id, actorUsername: req.session.user.username, action, message });
+}
+
 router.get("/users", async (req, res) => {
   const users = await db.listUsers();
   res.json(users);
@@ -44,6 +48,7 @@ router.post("/users", async (req, res) => {
     ghlUserId,
     ghlUserName,
   });
+  await log(req, "user_created", `Created user "${username}" (role: ${role})`);
   res.status(201).json({ status: "created" });
 });
 
@@ -52,6 +57,7 @@ router.put("/users/:id", async (req, res) => {
   if (role !== undefined && !["admin", "user"].includes(role)) {
     return res.status(400).json({ error: "invalid role" });
   }
+  const target = await db.getUserById(req.params.id);
   const update = { role, ghlUserId, ghlUserName };
   if (password) {
     const { hash, salt } = hashPassword(password);
@@ -59,6 +65,14 @@ router.put("/users/:id", async (req, res) => {
     update.passwordSalt = salt;
   }
   await db.updateUser(req.params.id, update);
+
+  const who = target ? target.username : req.params.id;
+  const changes = [];
+  if (role !== undefined) changes.push(`role → ${role}`);
+  if (ghlUserId !== undefined) changes.push(`GHL user → ${ghlUserName || ghlUserId || "(none)"}`);
+  if (password) changes.push("password reset");
+  if (changes.length) await log(req, "user_updated", `Updated user "${who}": ${changes.join(", ")}`);
+
   res.json({ status: "updated" });
 });
 
@@ -66,7 +80,9 @@ router.delete("/users/:id", async (req, res) => {
   if (req.params.id === req.session.user.id) {
     return res.status(400).json({ error: "cannot delete your own account while logged in as it" });
   }
+  const target = await db.getUserById(req.params.id);
   await db.deleteUser(req.params.id);
+  await log(req, "user_deleted", `Deleted user "${target ? target.username : req.params.id}"`);
   res.json({ status: "deleted" });
 });
 
@@ -77,9 +93,15 @@ router.get("/settings", async (req, res) => {
 });
 
 router.put("/settings", async (req, res) => {
-  const { autoTranscribeEnabled } = req.body || {};
-  await db.setAutoTranscribeEnabled(Boolean(autoTranscribeEnabled));
-  res.json({ autoTranscribeEnabled: Boolean(autoTranscribeEnabled) });
+  const enabled = Boolean((req.body || {}).autoTranscribeEnabled);
+  await db.setAutoTranscribeEnabled(enabled);
+  await log(req, "auto_transcribe_toggled", `Turned automatic transcription ${enabled ? "ON" : "OFF"}`);
+  res.json({ autoTranscribeEnabled: enabled });
+});
+
+router.get("/audit-log", async (req, res) => {
+  const result = await db.listAuditLog({ page: req.query.page, pageSize: req.query.pageSize });
+  res.json(result);
 });
 
 module.exports = router;

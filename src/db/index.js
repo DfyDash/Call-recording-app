@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+const { randomUUID } = require("crypto");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -287,6 +288,33 @@ async function setAutoTranscribeEnabled(enabled) {
   await pool.query(`UPDATE app_settings SET auto_transcribe_enabled = $1 WHERE id = 1`, [enabled]);
 }
 
+// --- audit_log (who changed what admin setting/account, and when) ---
+
+async function logAudit({ actorId, actorUsername, action, message }) {
+  await pool.query(
+    `INSERT INTO audit_log (id, actor_id, actor_username, action, message) VALUES ($1, $2, $3, $4, $5)`,
+    [randomUUID(), actorId || null, actorUsername || null, action, message]
+  );
+}
+
+async function listAuditLog({ page = 1, pageSize = 50 } = {}) {
+  const size = PAGE_SIZES.includes(Number(pageSize)) ? Number(pageSize) : 50;
+  const pageNum = Math.max(1, Number(page) || 1);
+
+  const { rows: countRows } = await pool.query(`SELECT COUNT(*) FROM audit_log`);
+  const total = Number(countRows[0].count);
+
+  const { rows } = await pool.query(
+    `SELECT id, actor_id AS "actorId", actor_username AS "actorUsername", action, message,
+            created_at AS "createdAt"
+     FROM audit_log
+     ORDER BY created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [size, (pageNum - 1) * size]
+  );
+  return { entries: rows, total, page: pageNum, pageSize: size };
+}
+
 module.exports = {
   pool,
   upsertContact,
@@ -312,4 +340,6 @@ module.exports = {
   setLastSyncedAt,
   getAutoTranscribeEnabled,
   setAutoTranscribeEnabled,
+  logAudit,
+  listAuditLog,
 };

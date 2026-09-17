@@ -9,8 +9,10 @@ history with role-based access (admins see everything; regular users see
 only calls they personally handled).
 
 **Phase**: prototype. No real client/PHI data, no HIPAA/compliance layer yet
-(BAAs, encryption-at-rest specifics, audit logging are all deliberately
-phase 2). This phase proves the pipeline works end to end for one account.
+(BAAs, encryption-at-rest specifics, full PHI-access audit logging are all
+deliberately phase 2 -- see "Admin activity log" below for the lighter,
+already-built admin-actions trail this phase does have). This phase proves
+the pipeline works end to end for one account.
 
 ## Architecture
 
@@ -45,6 +47,9 @@ phase 2). This phase proves the pipeline works end to end for one account.
 - `src/backfill.js` — one-off/on-demand script that walks a sub-account's
   entire call history (the live poller deliberately doesn't) — see
   "Historical backfill" below.
+- `audit_log` table, written from `src/routes/admin.js` — every admin
+  setting change and user-account action, with who and when — see "Admin
+  activity log" below.
 
 Built on Node/Express/Postgres so it can move to AWS (API Gateway + Lambda
 or ECS, RDS, S3) later without a re-platform — the eventual HIPAA-compliant
@@ -179,6 +184,24 @@ swapping providers later (Deepgram once/if its BAA process is sorted, or
 anything else) only means writing a new module behind the same interface,
 not touching the poller or API routes that call it.
 
+## Admin activity log
+
+**Manage users** has an "Activity log" section: every admin setting change
+and user-account action, who did it, and when. Covers the auto-transcribe
+toggle (on/off), creating a user, updating one (role change, GHL-user
+mapping change, password reset — never the password itself), and deleting
+one. Paginated (`audit_log`, `GET /api/admin/audit-log`), newest first.
+
+Entries are captured with the acting admin's username at write time rather
+than joined from `users` on read, so a log entry survives that admin's
+account later being deleted — deleting the account that made a change
+never erases the record that it happened.
+
+This is a lightweight admin-actions trail, not the full PHI-access audit
+logging (who viewed/downloaded which specific recording, tamper-evident
+storage, retention policy) that HIPAA compliance will eventually need —
+that's still phase 2, per "Deferred to later phases" below.
+
 ## Historical backfill
 
 GHL lets sub-accounts turn on auto-deleting call recordings after N days
@@ -223,7 +246,9 @@ runs is unrecoverable.
 
 ## Deferred to later phases (intentionally not built yet)
 
-- HIPAA compliance: encryption-at-rest specifics, BAAs, audit logging,
+- HIPAA compliance: encryption-at-rest specifics, BAAs, full PHI-access
+  audit logging (who viewed/downloaded which recording — the admin
+  activity log above only covers admin settings/account actions), and
   retention policies.
 - AI analysis of calls beyond raw transcription (summaries, sentiment,
   coaching scores).

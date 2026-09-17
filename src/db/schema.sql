@@ -80,3 +80,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
   CONSTRAINT app_settings_single_row CHECK (id = 1)
 );
 INSERT INTO app_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- Admin action history -- who changed what, and when. No FK to users(id):
+-- entries must survive that user's account later being deleted, so
+-- actor_username is captured at write time rather than joined later.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id              UUID PRIMARY KEY,
+  actor_id        UUID,
+  actor_username  TEXT,
+  action          TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON audit_log (created_at DESC);
