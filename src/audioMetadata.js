@@ -10,9 +10,17 @@ function buildComment({ occurredAt, direction, durationSeconds, contactName, pho
   return parts.join(" | ");
 }
 
-function buildTitle({ contactName, phone, direction }) {
+function formatTimestamp(date) {
+  // "2026-09-17 04:57 UTC" -- readable, and shows up wherever Title does,
+  // since many basic file-properties viewers (unlike this app's own
+  // dashboard) don't surface a Comment/Date field at all.
+  return `${date.toISOString().replace("T", " ").slice(0, 16)} UTC`;
+}
+
+function buildTitle({ occurredAt, contactName, phone, direction }) {
   const who = contactName || phone || "unknown contact";
-  return direction ? `Call with ${who} (${direction})` : `Call with ${who}`;
+  const base = direction ? `Call with ${who} (${direction})` : `Call with ${who}`;
+  return occurredAt ? `${formatTimestamp(occurredAt)} - ${base}` : base;
 }
 
 // --- WAV: inject a RIFF LIST/INFO chunk (read by Explorer/Finder/most players) ---
