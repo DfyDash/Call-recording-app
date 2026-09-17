@@ -327,9 +327,12 @@ runs is unrecoverable.
   isolated data) — this prototype is one deployment per sub-account.
 - Formal GHL Marketplace app packaging / OAuth (needed if this is ever sold
   as an installable marketplace app instead of deployed per-customer).
-- Email-based "forgot password" flow (needs SES or similar); today, users
-  change their own password from `/account.html`, and admins can reset
-  anyone's from `/admin.html`.
+- Email-based "forgot password" flow (needs AWS SES set up first). Today,
+  users change their own password from `/account.html`, and admins reset
+  anyone's from `/admin.html` -- `login.html` just points locked-out users
+  at their admin. Once SES is in, add a real "Forgot password?" link/flow
+  on `login.html` itself (request → emailed reset link → new password),
+  replacing that admin-only fallback.
 
 ## Moving to AWS
 
