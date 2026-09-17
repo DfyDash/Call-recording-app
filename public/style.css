@@ -28,12 +28,17 @@ body {
   margin: 0 0 12px;
 }
 
-#search {
+#search,
+.view-as {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.9rem;
+}
+
+.view-as {
+  margin-bottom: 8px;
 }
 
 .contact-list {

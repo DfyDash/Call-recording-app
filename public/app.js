@@ -5,8 +5,10 @@ const callHistory = document.getElementById("call-history");
 const contactHeading = document.getElementById("contact-heading");
 const callRows = document.getElementById("call-rows");
 const sessionBar = document.getElementById("session-bar");
+const viewAsSelect = document.getElementById("view-as");
 
 let activeContactId = null;
+let viewAs = "";
 
 async function loadSession() {
   const res = await fetch("/api/me");
@@ -14,11 +16,34 @@ async function loadSession() {
   const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a>` : "";
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink}</span>
     <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+
+  if (me.role === "admin") await loadViewAsOptions();
+}
+
+async function loadViewAsOptions() {
+  const res = await fetch("/api/admin/users");
+  const users = await res.json();
+  const agents = users.filter((u) => u.ghlUserId);
+
+  viewAsSelect.innerHTML = `<option value="">All calls</option>` +
+    agents.map((u) => `<option value="${escapeHtml(u.ghlUserId)}">${escapeHtml(u.ghlUserName || u.username)}</option>`).join("");
+  viewAsSelect.hidden = agents.length === 0;
+
+  viewAsSelect.addEventListener("change", () => {
+    viewAs = viewAsSelect.value;
+    activeContactId = null;
+    emptyState.hidden = false;
+    callHistory.hidden = true;
+    loadContacts(searchInput.value.trim());
+  });
 }
 
 async function loadContacts(search) {
-  const url = search ? `/api/contacts?search=${encodeURIComponent(search)}` : "/api/contacts";
-  const res = await fetch(url);
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (viewAs) params.set("viewAs", viewAs);
+  const query = params.toString();
+  const res = await fetch(`/api/contacts${query ? `?${query}` : ""}`);
   const contacts = await res.json();
   renderContacts(contacts);
 }
@@ -40,7 +65,8 @@ async function selectContact(contact) {
   callHistory.hidden = false;
   contactHeading.textContent = contact.name || contact.phone || contact.id;
 
-  const res = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/calls`);
+  const query = viewAs ? `?viewAs=${encodeURIComponent(viewAs)}` : "";
+  const res = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/calls${query}`);
   const calls = await res.json();
   renderCalls(calls);
 }

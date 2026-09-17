@@ -4,11 +4,14 @@ const { getPlayback } = require("../storage");
 
 const router = express.Router();
 
-// Admins see everything; regular users are scoped to calls they handled.
-// Returning undefined (no filter) for admins, vs. their GHL user id
-// otherwise, is the single enforcement point every route below relies on.
-function ownerFilter(req) {
-  return req.session.user.role === "admin" ? undefined : req.session.user.ghlUserId;
+// Regular users are always scoped to calls they handled -- this is the real
+// security boundary and never changes based on request input. Admins see
+// everything by default, but can optionally narrow the *list views* to a
+// specific GHL user via ?viewAs= for monitoring/spot-checking one agent;
+// that's a convenience filter, not a restriction on the admin's own access.
+function listFilter(req) {
+  if (req.session.user.role === "admin") return req.query.viewAs || undefined;
+  return req.session.user.ghlUserId;
 }
 
 router.get("/me", (req, res) => {
@@ -17,12 +20,12 @@ router.get("/me", (req, res) => {
 });
 
 router.get("/contacts", async (req, res) => {
-  const contacts = await db.listContacts(req.query.search, ownerFilter(req));
+  const contacts = await db.listContacts(req.query.search, listFilter(req));
   res.json(contacts);
 });
 
 router.get("/contacts/:id/calls", async (req, res) => {
-  const calls = await db.listCallsForContact(req.params.id, ownerFilter(req));
+  const calls = await db.listCallsForContact(req.params.id, listFilter(req));
   res.json(calls);
 });
 
@@ -41,8 +44,8 @@ router.get("/calls/:id/recording", async (req, res) => {
 
   // Enforced here too, not just in the list views -- a user must not be
   // able to fetch another user's recording just by knowing/guessing its URL.
-  const owner = ownerFilter(req);
-  if (owner && call.handledById !== owner) {
+  // Admins always have access regardless of any ?viewAs= list filter.
+  if (req.session.user.role !== "admin" && call.handledById !== req.session.user.ghlUserId) {
     return res.status(403).json({ error: "not your call" });
   }
 
