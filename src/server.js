@@ -8,6 +8,7 @@ const authRouter = require("./routes/auth");
 const adminRouter = require("./routes/admin");
 const { requireAuth } = require("./auth");
 const poller = require("./poller");
+const transcriptionPoller = require("./transcriptionPoller");
 
 const app = express();
 
@@ -43,3 +44,4 @@ app.listen(port, () => {
 // Call ingestion now happens by polling GHL's own API rather than a GHL
 // workflow/webhook -- see src/poller.js for why.
 poller.start();
+transcriptionPoller.start();

@@ -65,4 +65,16 @@ router.get("/calls/:id/recording", async (req, res) => {
   return res.status(404).json({ error: "recording not found" });
 });
 
+router.get("/calls/:id/transcript", async (req, res) => {
+  const call = await db.getCall(req.params.id);
+  if (!call) return res.status(404).json({ error: "call not found" });
+
+  // Same access boundary as the recording itself.
+  if (req.session.user.role !== "admin" && call.handledById !== req.session.user.ghlUserId) {
+    return res.status(403).json({ error: "not your call" });
+  }
+
+  res.json({ status: call.transcriptionStatus, transcript: call.transcript });
+});
+
 module.exports = router;

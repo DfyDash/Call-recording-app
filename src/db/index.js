@@ -68,6 +68,28 @@ async function markCallFailed(callId) {
   );
 }
 
+// --- transcription (src/transcription.js, src/transcriptionPoller.js) ---
+
+async function markTranscriptionPending(callId) {
+  await pool.query(`UPDATE calls SET transcription_status = 'pending' WHERE id = $1`, [callId]);
+}
+
+async function markTranscriptionComplete(callId, transcript) {
+  await pool.query(
+    `UPDATE calls SET transcription_status = 'completed', transcript = $2 WHERE id = $1`,
+    [callId, transcript]
+  );
+}
+
+async function markTranscriptionFailed(callId) {
+  await pool.query(`UPDATE calls SET transcription_status = 'failed' WHERE id = $1`, [callId]);
+}
+
+async function listPendingTranscriptions() {
+  const { rows } = await pool.query(`SELECT id FROM calls WHERE transcription_status = 'pending'`);
+  return rows;
+}
+
 // GHL's Messages API reliably includes who handled a call (unlike the
 // webhook payload, which depends on the workflow body being configured
 // right), so it's applied as a correction after the initial insert once
@@ -117,7 +139,8 @@ async function listCallsForContact(contactId, ghlUserId) {
   const { rows } = await pool.query(
     `SELECT id, direction, duration_seconds AS "durationSeconds",
             occurred_at AS "occurredAt", recording_status AS "recordingStatus",
-            storage_key IS NOT NULL AS "hasRecording", handled_by_name AS "handledByName"
+            storage_key IS NOT NULL AS "hasRecording", handled_by_name AS "handledByName",
+            transcription_status AS "transcriptionStatus"
      FROM calls
      WHERE ghl_contact_id = $1 ${condition}
      ORDER BY occurred_at DESC NULLS LAST, created_at DESC`,
@@ -130,7 +153,8 @@ async function getCall(callId) {
   const { rows } = await pool.query(
     `SELECT c.id, c.storage_key AS "storageKey", c.recording_status AS "recordingStatus",
             c.occurred_at AS "occurredAt", c.direction, c.ghl_contact_id AS "contactId",
-            c.handled_by_id AS "handledById", ct.name, ct.phone
+            c.handled_by_id AS "handledById", c.transcription_status AS "transcriptionStatus",
+            c.transcript, ct.name, ct.phone
      FROM calls c
      LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
      WHERE c.id = $1`,
@@ -218,6 +242,10 @@ module.exports = {
   insertCall,
   markCallStored,
   markCallFailed,
+  markTranscriptionPending,
+  markTranscriptionComplete,
+  markTranscriptionFailed,
+  listPendingTranscriptions,
   updateCallHandler,
   listContacts,
   listCallsForContact,

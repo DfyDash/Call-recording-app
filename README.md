@@ -34,6 +34,10 @@ phase 2). This phase proves the pipeline works end to end for one account.
   playback/download, admin user management, change password).
 - Postgres for metadata (`src/db`), pluggable storage for recordings
   (`src/storage`: local disk by default, S3 when `STORAGE_DRIVER=s3`).
+- `src/transcription.js`, `src/transcriptionPoller.js` — optional call
+  transcription via AWS Transcribe (`TRANSCRIPTION_ENABLED=true`), a
+  meaningful undercut of GHL's own transcription fee — see "Call
+  transcription" below.
 
 Built on Node/Express/Postgres so it can move to AWS (API Gateway + Lambda
 or ECS, RDS, S3) later without a re-platform — the eventual HIPAA-compliant
@@ -92,6 +96,37 @@ sub-account's Location ID in `.env`. That's it — no workflow to build, no
 webhook URL to configure. The poller starts watching automatically as soon
 as the server boots with those set.
 
+## Call transcription
+
+Optional (`TRANSCRIPTION_ENABLED=true`), via AWS Transcribe. GHL charges
+$0.039/min for its own call transcription (confirmed directly in the GHL UI);
+AWS Transcribe's cost is ~$0.024/min, so this alone undercuts it, with room
+to price well below GHL's rate and still carry a healthy margin.
+
+Deepgram was the other option on the table (~$0.004/min, roughly 6x
+cheaper still) but was passed over for one reason: **BAA turnaround.** AWS
+will sign a BAA self-serve, in AWS Artifact, covering the whole account —
+already needed for RDS/S3/EC2 once real PHI is in play. Deepgram's BAA is
+sales-negotiated with no guaranteed turnaround, which is a bad position to
+be in exactly when a customer is asking about HIPAA compliance. One AWS BAA
+covering everything beat a cheaper per-minute rate riding on a second
+vendor relationship.
+
+Mechanically: AWS Transcribe only accepts audio from S3, never raw bytes,
+so `src/transcription.js` uploads the recording to a transient S3 key
+(independent of `STORAGE_DRIVER` — transcription works even when recordings
+are permanently stored on local disk) and starts an async job. Jobs aren't
+instant, so `src/transcriptionPoller.js` checks outstanding jobs every 30s;
+on completion the transcript text is saved to Postgres (`calls.transcript`)
+and the transient S3 copy + AWS's own job record are deleted. The dashboard
+shows a "View transcript" toggle per call once one's ready.
+
+The vendor call is isolated behind `src/transcription.js`'s
+`isEnabled()` / `startJob()` / `checkJob()` interface specifically so
+swapping providers later (Deepgram once/if its BAA process is sorted, or
+anything else) only means writing a new module behind the same interface,
+not touching the poller or API routes that call it.
+
 ## Definition of done for this phase
 
 - A real call in the GHL sub-account is picked up by the poller within
@@ -107,7 +142,8 @@ as the server boots with those set.
 
 - HIPAA compliance: encryption-at-rest specifics, BAAs, audit logging,
   retention policies.
-- Transcription / AI analysis of calls.
+- AI analysis of calls beyond raw transcription (summaries, sentiment,
+  coaching scores).
 - True multi-tenancy (one deployment serving multiple GHL sub-accounts with
   isolated data) — this prototype is one deployment per sub-account.
 - Formal GHL Marketplace app packaging / OAuth (needed if this is ever sold

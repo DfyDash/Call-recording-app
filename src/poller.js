@@ -3,6 +3,7 @@ const db = require("./db");
 const ghlApi = require("./ghlApi");
 const { saveRecording } = require("./storage");
 const { embedMetadata } = require("./audioMetadata");
+const transcription = require("./transcription");
 
 const POLL_INTERVAL_MS = 60 * 1000;
 const CONVERSATIONS_PER_POLL = 100;
@@ -55,6 +56,15 @@ async function processCallMessage(conversation, message) {
     await saveRecording(key, taggedBuffer);
     await db.markCallStored(callRowId, key);
     console.log(`[poller] stored recording for call ${message.id}`);
+
+    if (transcription.isEnabled()) {
+      try {
+        await transcription.startJob(callRowId, taggedBuffer, extension);
+        await db.markTranscriptionPending(callRowId);
+      } catch (err) {
+        console.error(`[poller] failed to start transcription for call ${message.id}:`, err);
+      }
+    }
   } catch (err) {
     console.error(`[poller] failed to fetch/store recording for call ${message.id}:`, err);
     await db.markCallFailed(callRowId);

@@ -71,6 +71,22 @@ async function selectContact(contact) {
   renderCalls(calls);
 }
 
+function transcriptCell(call) {
+  switch (call.transcriptionStatus) {
+    case "completed":
+      return `<details class="transcript-details" data-call="${call.id}">
+                <summary>View transcript</summary>
+                <p class="transcript-text">Loading…</p>
+              </details>`;
+    case "pending":
+      return `<span class="transcript-pending">Transcribing…</span>`;
+    case "failed":
+      return `<span class="transcript-failed">Transcription failed</span>`;
+    default:
+      return `<span>-</span>`;
+  }
+}
+
 function renderCalls(calls) {
   callRows.innerHTML = "";
   for (const call of calls) {
@@ -91,10 +107,27 @@ function renderCalls(calls) {
       <td>${escapeHtml(call.handledByName || "-")}</td>
       <td>${escapeHtml(call.recordingStatus)}</td>
       <td>${recordingCell}</td>
+      <td>${transcriptCell(call)}</td>
     `;
     callRows.appendChild(tr);
   }
 }
+
+// Transcript text is fetched lazily, only when a row's <details> is opened
+// -- capture phase because "toggle" doesn't bubble in every browser.
+callRows.addEventListener(
+  "toggle",
+  async (e) => {
+    const details = e.target.closest(".transcript-details");
+    if (!details || !details.open || details.dataset.loaded) return;
+    details.dataset.loaded = "1";
+    const textEl = details.querySelector(".transcript-text");
+    const res = await fetch(`/api/calls/${details.dataset.call}/transcript`);
+    const data = await res.json();
+    textEl.textContent = data.transcript || "(empty transcript)";
+  },
+  true
+);
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({

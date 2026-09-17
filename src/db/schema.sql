@@ -31,6 +31,16 @@ CREATE TABLE IF NOT EXISTS calls (
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS handled_by_id TEXT;
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS handled_by_name TEXT;
 
+-- Transcription is optional (TRANSCRIPTION_ENABLED) and async (AWS Transcribe
+-- jobs run in the background -- see src/transcription.js /
+-- src/transcriptionPoller.js), so a call's transcript arrives well after the
+-- row itself. 'none' covers both "feature is off" and "not submitted yet".
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS transcription_status TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS transcript TEXT;
+ALTER TABLE calls DROP CONSTRAINT IF EXISTS calls_transcription_status_check;
+ALTER TABLE calls ADD CONSTRAINT calls_transcription_status_check
+  CHECK (transcription_status IN ('none', 'pending', 'completed', 'failed'));
+
 CREATE INDEX IF NOT EXISTS calls_contact_idx ON calls (ghl_contact_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS calls_handled_by_idx ON calls (handled_by_id);
 

@@ -101,6 +101,25 @@ audio {
   white-space: nowrap;
 }
 
+.transcript-details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.transcript-text {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 320px;
+  white-space: pre-wrap;
+}
+
+.transcript-pending,
+.transcript-failed {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;
