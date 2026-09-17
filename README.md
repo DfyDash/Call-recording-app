@@ -8,11 +8,13 @@ file, and stores everything in an organized, searchable, per-contact call
 history with role-based access (admins see everything; regular users see
 only calls they personally handled).
 
-**Phase**: prototype. No real client/PHI data, no HIPAA/compliance layer yet
-(BAAs, encryption-at-rest specifics, full PHI-access audit logging are all
-deliberately phase 2 -- see "Admin activity log" below for the lighter,
-already-built admin-actions trail this phase does have). This phase proves
-the pipeline works end to end for one account.
+**Phase**: prototype. No real client/PHI data yet, and most of a HIPAA
+compliance layer still isn't built (BAAs, encryption-at-rest specifics,
+retention/purge policy are deliberately phase 2) -- but PHI-access and
+admin-action audit logging (45 CFR 164.312(b)'s "Audit controls") is
+already in, ahead of actually needing it. See "Admin activity log" and
+"PHI-access log" below. This phase proves the pipeline works end to end
+for one account.
 
 ## Architecture
 
@@ -50,6 +52,9 @@ the pipeline works end to end for one account.
 - `audit_log` table, written from `src/routes/admin.js` — every admin
   setting change and user-account action, with who and when — see "Admin
   activity log" below.
+- `phi_access_log` table, written from `src/routes/api.js` — who accessed
+  which call's recording/transcript, when, from where, and whether it was
+  allowed (including denied attempts) — see "PHI-access log" below.
 
 Built on Node/Express/Postgres so it can move to AWS (API Gateway + Lambda
 or ECS, RDS, S3) later without a re-platform — the eventual HIPAA-compliant
@@ -197,10 +202,45 @@ than joined from `users` on read, so a log entry survives that admin's
 account later being deleted — deleting the account that made a change
 never erases the record that it happened.
 
-This is a lightweight admin-actions trail, not the full PHI-access audit
-logging (who viewed/downloaded which specific recording, tamper-evident
-storage, retention policy) that HIPAA compliance will eventually need —
-that's still phase 2, per "Deferred to later phases" below.
+This is a lightweight admin-actions trail, distinct from the PHI-access log
+below (different actors — any user, not just admins — and a much higher
+volume, so it gets its own page rather than crowding this one).
+
+## PHI-access log
+
+**/phi-access-log.html** (linked from Manage users): who accessed which
+call's recording or transcript, when, from where, how, and whether it was
+allowed. Built against the actual requirement, researched up front rather
+than guessed:
+
+HIPAA's Security Rule "Audit controls" provision (45 CFR § 164.312(b))
+requires recording and examining activity on any system that stores,
+processes, or provides access to ePHI. Neither the field list nor the
+storage mechanism is spelled out in the regulation itself, but HHS
+guidance and compliance practice converge on a consistent shape:
+
+- **Who, what, when, where, how, and success/failure** — logging only
+  successful access isn't enough; a *denied* attempt (someone reaching for
+  a call that isn't theirs) is itself a security-relevant event worth a
+  record. `phi_access_log.success`/`denial_reason` capture that.
+- **Retention: 6 years minimum** (45 CFR § 164.316(b)(2)(i)), from
+  creation. Nothing purges these rows — there's no code path that deletes
+  from this table at all, and nothing will be old enough to need purging
+  for years regardless.
+- **Tamper-evidence** — logs should resist modification, not just lack an
+  edit button in the UI. `phi_access_log` and `audit_log` both have a
+  Postgres trigger (`reject_log_mutation()`, in `src/db/schema.sql`) that
+  raises on any `UPDATE`/`DELETE`, regardless of which credential issues
+  it — append-only enforced at the database engine, not just an
+  application-layer convention. Full cryptographic hash-chaining / WORM
+  storage is the next rung up from that and deliberately not built yet:
+  disproportionate for a prototype with no real PHI in it yet, and easy to
+  add later without touching how entries are written now.
+
+Scoped to actual content access — recording playback/download, transcript
+reads, transcription requests (`src/routes/api.js`) — not every list-view
+fetch, which is metadata browsing (call duration, direction, who handled
+it), not PHI access, and would otherwise flood the log on every page load.
 
 ## Historical backfill
 
@@ -246,10 +286,9 @@ runs is unrecoverable.
 
 ## Deferred to later phases (intentionally not built yet)
 
-- HIPAA compliance: encryption-at-rest specifics, BAAs, full PHI-access
-  audit logging (who viewed/downloaded which recording — the admin
-  activity log above only covers admin settings/account actions), and
-  retention policies.
+- HIPAA compliance: encryption-at-rest specifics, BAAs, formal
+  retention/purge policy (audit logging itself is already built — see
+  "PHI-access log" and "Admin activity log" above).
 - AI analysis of calls beyond raw transcription (summaries, sentiment,
   coaching scores).
 - True multi-tenancy (one deployment serving multiple GHL sub-accounts with

@@ -315,6 +315,41 @@ async function listAuditLog({ page = 1, pageSize = 50 } = {}) {
   return { entries: rows, total, page: pageNum, pageSize: size };
 }
 
+// --- phi_access_log (who accessed which call's recording/transcript,
+// when, from where, how, and whether it was allowed -- see routes/api.js) ---
+
+async function logPhiAccess({ userId, username, action, callId, success, denialReason, ipAddress, userAgent }) {
+  await pool.query(
+    `INSERT INTO phi_access_log
+       (id, user_id, username, action, call_id, success, denial_reason, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [randomUUID(), userId || null, username || null, action, callId || null, success, denialReason || null, ipAddress || null, userAgent || null]
+  );
+}
+
+async function listPhiAccessLog({ page = 1, pageSize = 50 } = {}) {
+  const size = PAGE_SIZES.includes(Number(pageSize)) ? Number(pageSize) : 50;
+  const pageNum = Math.max(1, Number(page) || 1);
+
+  const { rows: countRows } = await pool.query(`SELECT COUNT(*) FROM phi_access_log`);
+  const total = Number(countRows[0].count);
+
+  // LEFT JOINs purely for display (which contact this call belongs to) --
+  // the log itself never depends on the call or contact still existing.
+  const { rows } = await pool.query(
+    `SELECT l.id, l.user_id AS "userId", l.username, l.action, l.call_id AS "callId", l.success,
+            l.denial_reason AS "denialReason", l.ip_address AS "ipAddress", l.user_agent AS "userAgent",
+            l.created_at AS "createdAt", ct.name AS "contactName", ct.phone AS "contactPhone"
+     FROM phi_access_log l
+     LEFT JOIN calls c ON c.id = l.call_id
+     LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     ORDER BY l.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [size, (pageNum - 1) * size]
+  );
+  return { entries: rows, total, page: pageNum, pageSize: size };
+}
+
 module.exports = {
   pool,
   upsertContact,
@@ -342,4 +377,6 @@ module.exports = {
   setAutoTranscribeEnabled,
   logAudit,
   listAuditLog,
+  logPhiAccess,
+  listPhiAccessLog,
 };

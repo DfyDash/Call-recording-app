@@ -93,3 +93,50 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON audit_log (created_at DESC);
+
+-- PHI-access log: who accessed which call's recording/transcript, when,
+-- from where, how, and whether it was allowed -- see src/routes/api.js.
+-- HIPAA's audit-controls rule (45 CFR 164.312(b)) expects both successful
+-- and denied access attempts recorded; success=false rows are someone
+-- being blocked by the RBAC check, which is itself worth a record.
+-- No FK to users(id) or calls(id), same reasoning as audit_log above:
+-- entries must outlive the account or (eventually) the recording they
+-- reference, not disappear when either is deleted.
+CREATE TABLE IF NOT EXISTS phi_access_log (
+  id             UUID PRIMARY KEY,
+  user_id        UUID,
+  username       TEXT,
+  action         TEXT NOT NULL,   -- recording_played | recording_downloaded | transcript_viewed | transcription_requested
+  call_id        UUID,
+  success        BOOLEAN NOT NULL,
+  denial_reason  TEXT,
+  ip_address     TEXT,
+  user_agent     TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS phi_access_log_created_at_idx ON phi_access_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS phi_access_log_call_id_idx ON phi_access_log (call_id);
+CREATE INDEX IF NOT EXISTS phi_access_log_user_id_idx ON phi_access_log (user_id);
+
+-- Append-only enforcement for both log tables above: HIPAA's audit-controls
+-- guidance expects tamper-evident logs, not just "the app has no edit
+-- button". This rejects UPDATE/DELETE at the database engine level
+-- regardless of which credential issues it -- a real barrier, not just an
+-- application-layer convention. (Full cryptographic hash-chaining / WORM
+-- storage is the next step up and deliberately not built yet -- see
+-- "Admin activity log" / PHI-access logging in the README.)
+CREATE OR REPLACE FUNCTION reject_log_mutation() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION '% is append-only: % not permitted', TG_TABLE_NAME, TG_OP;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS audit_log_append_only ON audit_log;
+CREATE TRIGGER audit_log_append_only
+  BEFORE UPDATE OR DELETE ON audit_log
+  FOR EACH ROW EXECUTE FUNCTION reject_log_mutation();
+
+DROP TRIGGER IF EXISTS phi_access_log_append_only ON phi_access_log;
+CREATE TRIGGER phi_access_log_append_only
+  BEFORE UPDATE OR DELETE ON phi_access_log
+  FOR EACH ROW EXECUTE FUNCTION reject_log_mutation();

@@ -15,6 +15,25 @@ function listFilter(req) {
   return req.session.user.ghlUserId;
 }
 
+// HIPAA's audit-controls rule (45 CFR 164.312(b)) expects both successful
+// and denied access attempts recorded -- a denial is itself a
+// security-relevant event (someone trying to reach a call that isn't
+// theirs). Scoped to actual content access (recording playback/download,
+// transcript reads, transcription requests) rather than every list-view
+// fetch, which is just metadata browsing, not PHI access.
+function logAccess(req, { action, callId, success, denialReason }) {
+  return db.logPhiAccess({
+    userId: req.session.user.id,
+    username: req.session.user.username,
+    action,
+    callId,
+    success,
+    denialReason,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+}
+
 router.get("/me", (req, res) => {
   const { username, role, ghlUserId } = req.session.user;
   res.json({ username, role, ghlUserId, transcriptionEnabled: transcription.isEnabled() });
@@ -57,12 +76,23 @@ router.get("/calls/:id/recording", async (req, res) => {
   // Enforced here too, not just in the list views -- a user must not be
   // able to fetch another user's recording just by knowing/guessing its URL.
   // Admins always have access regardless of any ?viewAs= list filter.
+  const download = req.query.download !== undefined;
   if (req.session.user.role !== "admin" && call.handledById !== req.session.user.ghlUserId) {
+    await logAccess(req, {
+      action: download ? "recording_downloaded" : "recording_played",
+      callId: call.id,
+      success: false,
+      denialReason: "not_your_call",
+    });
     return res.status(403).json({ error: "not your call" });
   }
 
-  const download = req.query.download !== undefined;
   const filename = download ? buildDownloadFilename(call) : undefined;
+  await logAccess(req, {
+    action: download ? "recording_downloaded" : "recording_played",
+    callId: call.id,
+    success: true,
+  });
 
   const playback = await getPlayback(call.storageKey, filename);
   if (playback.redirectUrl) {
@@ -83,9 +113,11 @@ router.get("/calls/:id/transcript", async (req, res) => {
 
   // Same access boundary as the recording itself.
   if (req.session.user.role !== "admin" && call.handledById !== req.session.user.ghlUserId) {
+    await logAccess(req, { action: "transcript_viewed", callId: call.id, success: false, denialReason: "not_your_call" });
     return res.status(403).json({ error: "not your call" });
   }
 
+  await logAccess(req, { action: "transcript_viewed", callId: call.id, success: true });
   res.json({ status: call.transcriptionStatus, transcript: call.transcript });
 });
 
@@ -102,6 +134,7 @@ router.post("/calls/:id/transcribe", async (req, res) => {
     return res.status(404).json({ error: "recording not found" });
   }
   if (req.session.user.role !== "admin" && call.handledById !== req.session.user.ghlUserId) {
+    await logAccess(req, { action: "transcription_requested", callId: call.id, success: false, denialReason: "not_your_call" });
     return res.status(403).json({ error: "not your call" });
   }
   if (call.transcriptionStatus === "pending" || call.transcriptionStatus === "completed") {
@@ -113,6 +146,7 @@ router.post("/calls/:id/transcribe", async (req, res) => {
     const extension = call.storageKey.split(".").pop();
     await transcription.startJob(call.id, buffer, extension);
     await db.markTranscriptionPending(call.id);
+    await logAccess(req, { action: "transcription_requested", callId: call.id, success: true });
     res.json({ status: "pending" });
   } catch (err) {
     console.error(`[api] failed to start transcription for call ${call.id}:`, err);

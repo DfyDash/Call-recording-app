@@ -104,4 +104,13 @@ router.get("/audit-log", async (req, res) => {
   res.json(result);
 });
 
+// PHI-access log (who accessed which call's recording/transcript, when,
+// success or denied) -- see routes/api.js. HIPAA's audit-controls rule
+// expects this reviewed regularly, not just recorded, hence a real view
+// rather than just rows sitting in the database.
+router.get("/phi-access-log", async (req, res) => {
+  const result = await db.listPhiAccessLog({ page: req.query.page, pageSize: req.query.pageSize });
+  res.json(result);
+});
+
 module.exports = router;
