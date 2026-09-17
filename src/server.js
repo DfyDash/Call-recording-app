@@ -3,18 +3,17 @@ const path = require("path");
 const express = require("express");
 const session = require("express-session");
 
-const webhookRouter = require("./routes/webhook");
 const apiRouter = require("./routes/api");
 const authRouter = require("./routes/auth");
 const adminRouter = require("./routes/admin");
 const { requireAuth } = require("./auth");
+const poller = require("./poller");
 
 const app = express();
 
 app.set("trust proxy", 1); // behind nginx, which terminates TLS
 
 app.get("/health", (req, res) => res.json({ ok: true }));
-app.use("/webhooks", webhookRouter); // authenticated by its own token, not sessions
 
 app.use(
   session({
@@ -40,3 +39,7 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Call Recording Vault listening on port ${port}`);
 });
+
+// Call ingestion now happens by polling GHL's own API rather than a GHL
+// workflow/webhook -- see src/poller.js for why.
+poller.start();

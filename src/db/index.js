@@ -197,6 +197,21 @@ async function deleteUser(id) {
   await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
 }
 
+// --- sync_state (poller checkpoint) ---
+
+async function getLastSyncedAt() {
+  const { rows } = await pool.query(`SELECT last_synced_at AS "lastSyncedAt" FROM sync_state WHERE id = 1`);
+  return rows[0] ? rows[0].lastSyncedAt : null;
+}
+
+async function setLastSyncedAt(date) {
+  await pool.query(
+    `INSERT INTO sync_state (id, last_synced_at) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET last_synced_at = EXCLUDED.last_synced_at`,
+    [date]
+  );
+}
+
 module.exports = {
   pool,
   upsertContact,
@@ -213,4 +228,6 @@ module.exports = {
   listUsers,
   updateUser,
   deleteUser,
+  getLastSyncedAt,
+  setLastSyncedAt,
 };

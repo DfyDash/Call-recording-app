@@ -47,3 +47,12 @@ CREATE TABLE IF NOT EXISTS users (
   ghl_user_name  TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Single-row checkpoint for the polling-based ingestion (replaces the GHL
+-- webhook/workflow entirely -- see src/poller.js). Tracks the newest call
+-- dateAdded already processed, so each poll only looks at what's new.
+CREATE TABLE IF NOT EXISTS sync_state (
+  id              INT PRIMARY KEY DEFAULT 1,
+  last_synced_at  TIMESTAMPTZ,
+  CONSTRAINT sync_state_single_row CHECK (id = 1)
+);

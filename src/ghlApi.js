@@ -1,7 +1,6 @@
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 const CALL_MESSAGE_TYPE = 1; // GHL's Conversations message type for phone calls
-const MATCH_WINDOW_MS = 5 * 60 * 1000; // tolerate up to 5min clock/logging drift
 
 function headers() {
   return {
@@ -15,43 +14,35 @@ function isConfigured() {
   return Boolean(process.env.GHL_API_TOKEN && process.env.GHL_LOCATION_ID);
 }
 
-async function findConversationId(contactId) {
+// Conversations sorted by most recent activity, across the whole
+// sub-account -- no contactId filter, so this is what the poller scans on
+// each cycle to find anything new. GHL's "recording URL" isn't exposed on
+// call messages at all (confirmed against GHL's own docs), which is why
+// this app pulls call data via this API rather than a GHL workflow/webhook.
+async function searchConversations(limit = 100) {
   const url = new URL(`${GHL_API_BASE}/conversations/search`);
   url.searchParams.set("locationId", process.env.GHL_LOCATION_ID);
-  url.searchParams.set("contactId", contactId);
-
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("sort", "desc");
+  url.searchParams.set("sortBy", "last_message_date");
   const res = await fetch(url, { headers: headers() });
   if (!res.ok) throw new Error(`conversations/search failed with status ${res.status}`);
   const data = await res.json();
-  const conversation = (data.conversations || [])[0];
-  return conversation ? conversation.id : null;
+  return data.conversations || [];
 }
 
-async function findCallMessage(conversationId, occurredAt) {
+// Every call-type message in a conversation (GHL mixes calls, SMS, emails,
+// etc. into the same message list).
+async function listCallMessages(conversationId) {
   const url = `${GHL_API_BASE}/conversations/${conversationId}/messages`;
   const res = await fetch(url, { headers: headers() });
   if (!res.ok) throw new Error(`conversations/messages failed with status ${res.status}`);
   const data = await res.json();
   const messages = (data.messages && data.messages.messages) || [];
-
-  const calls = messages.filter((m) => m.type === CALL_MESSAGE_TYPE);
-  if (calls.length === 0) return null;
-
-  if (!occurredAt) return calls[0];
-
-  let best = null;
-  let bestDelta = Infinity;
-  for (const m of calls) {
-    const delta = Math.abs(new Date(m.dateAdded).getTime() - occurredAt.getTime());
-    if (delta < bestDelta) {
-      bestDelta = delta;
-      best = m;
-    }
-  }
-  return bestDelta <= MATCH_WINDOW_MS ? best : null;
+  return messages.filter((m) => m.type === CALL_MESSAGE_TYPE);
 }
 
-async function fetchRecording(messageId) {
+async function downloadRecording(messageId) {
   const url = `${GHL_API_BASE}/conversations/messages/${messageId}/locations/${process.env.GHL_LOCATION_ID}/recording`;
   const res = await fetch(url, { headers: headers() });
   if (!res.ok) throw new Error(`get-message-recording failed with status ${res.status}`);
@@ -73,26 +64,8 @@ async function getUserName(userId) {
   return cachedUsersById.get(userId) || null;
 }
 
-// Looks up and downloads the recording for a completed call via GHL's API,
-// since the Call Completed webhook trigger doesn't expose a recording URL
-// merge field at all -- confirmed against GHL's own docs. Also returns who
-// handled the call (from the message's own userId, which GHL always sets),
-// so callers get accurate access-control data without needing it threaded
-// through the webhook payload at all.
-async function findCallRecording({ contactId, occurredAt }) {
-  const conversationId = await findConversationId(contactId);
-  if (!conversationId) return null;
-
-  const message = await findCallMessage(conversationId, occurredAt);
-  if (!message) return null;
-
-  const recording = await fetchRecording(message.id);
-  const handledByName = await getUserName(message.userId).catch(() => null);
-  return { ...recording, handledById: message.userId || null, handledByName };
-}
-
 // Cached for the process lifetime -- a sub-account's timezone essentially
-// never changes, and this saves an API call on every single webhook.
+// never changes, and this saves an API call on every poll cycle.
 let cachedTimezone = null;
 
 // Fetches the sub-account's actual configured timezone (an IANA name like
@@ -130,4 +103,12 @@ async function listUsers() {
   return (data.users || []).map((u) => ({ id: u.id, name: u.name, email: u.email }));
 }
 
-module.exports = { isConfigured, findCallRecording, getAccountTimezone, listUsers };
+module.exports = {
+  isConfigured,
+  searchConversations,
+  listCallMessages,
+  downloadRecording,
+  getUserName,
+  getAccountTimezone,
+  listUsers,
+};
