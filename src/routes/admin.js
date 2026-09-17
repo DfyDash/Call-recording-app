@@ -15,8 +15,36 @@ function log(req, action, message) {
   return db.logAudit({ actorId: req.session.user.id, actorUsername: req.session.user.username, action, message });
 }
 
+// Auto-links any user whose login username matches a GHL user's email
+// (case-insensitively), so the common case -- login username is the
+// person's email, same as in GHL -- doesn't require manually picking
+// them from the dropdown. Only fills in users with no link yet; never
+// overrides a link an admin already set.
+async function autoLinkGhlUsers(users) {
+  const unlinked = users.filter((u) => !u.ghlUserId);
+  if (!unlinked.length || !ghlApi.isConfigured()) return users;
+
+  let ghlUsers;
+  try {
+    ghlUsers = await ghlApi.listUsers();
+  } catch (err) {
+    console.error("[admin] could not auto-link GHL users:", err);
+    return users;
+  }
+  const byEmail = new Map(ghlUsers.filter((u) => u.email).map((u) => [u.email.toLowerCase(), u]));
+
+  for (const user of unlinked) {
+    const match = byEmail.get(user.username.toLowerCase());
+    if (!match) continue;
+    await db.updateUser(user.id, { ghlUserId: match.id, ghlUserName: match.name || match.email });
+    user.ghlUserId = match.id;
+    user.ghlUserName = match.name || match.email;
+  }
+  return users;
+}
+
 router.get("/users", async (req, res) => {
-  const users = await db.listUsers();
+  const users = await autoLinkGhlUsers(await db.listUsers());
   res.json(users);
 });
 
