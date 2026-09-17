@@ -39,6 +39,23 @@ function infoString(value) {
   return Buffer.concat([Buffer.from(String(value), "ascii"), Buffer.from([0])]);
 }
 
+// Strips any existing top-level LIST/INFO chunk so re-tagging a file (e.g.
+// backfilling old recordings after a metadata-format change) replaces it
+// instead of stacking a second, possibly-conflicting one.
+function stripExistingInfoChunk(body) {
+  const kept = [];
+  let offset = 0;
+  while (offset + 8 <= body.length) {
+    const id = body.toString("ascii", offset, offset + 4);
+    const size = body.readUInt32LE(offset + 4);
+    const total = 8 + size + (size % 2);
+    const isInfoList = id === "LIST" && body.toString("ascii", offset + 8, offset + 12) === "INFO";
+    if (!isInfoList) kept.push(body.subarray(offset, offset + total));
+    offset += total;
+  }
+  return Buffer.concat(kept);
+}
+
 function embedWavMetadata(buffer, meta) {
   if (
     buffer.length < 12 ||
@@ -62,7 +79,7 @@ function embedWavMetadata(buffer, meta) {
   const infoListChunk = riffChunk("LIST", Buffer.concat([Buffer.from("INFO", "ascii"), ...subChunks]));
 
   const header = buffer.subarray(0, 12);
-  const rest = buffer.subarray(12);
+  const rest = stripExistingInfoChunk(buffer.subarray(12));
   const result = Buffer.concat([header, infoListChunk, rest]);
   result.writeUInt32LE(result.length - 8, 4); // update RIFF chunk size
   return result;
