@@ -53,6 +53,7 @@ function presetRange(preset) {
   if (preset === "year") {
     return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
   }
+  if (preset === "all") return { from: "", to: "" };
   return { from: "", to: "" };
 }
 
