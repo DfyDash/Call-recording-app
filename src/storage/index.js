@@ -37,12 +37,19 @@ function getS3Client() {
   return s3Client;
 }
 
+// Recordings live under this prefix rather than at the bucket root, so the
+// IAM policy granting the app access can be scoped to recordings/* instead
+// of the whole bucket (which also holds unrelated things like deploy
+// tarballs). The stored `key` itself (used in calls.storage_key) stays
+// prefix-free -- it's a driver-agnostic identifier, not an S3 path.
+const s3ObjectKey = (key) => `recordings/${key}`;
+
 async function s3Save(key, buffer) {
   const { PutObjectCommand } = require("@aws-sdk/client-s3");
   await getS3Client().send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
-      Key: key,
+      Key: s3ObjectKey(key),
       Body: buffer,
     })
   );
@@ -51,7 +58,7 @@ async function s3Save(key, buffer) {
 
 async function s3GetBuffer(key) {
   const { GetObjectCommand } = require("@aws-sdk/client-s3");
-  const res = await getS3Client().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }));
+  const res = await getS3Client().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: s3ObjectKey(key) }));
   const chunks = [];
   for await (const chunk of res.Body) chunks.push(chunk);
   return Buffer.concat(chunks);
@@ -62,7 +69,7 @@ async function s3GetPresignedUrl(key, downloadFilename) {
   const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET,
-    Key: key,
+    Key: s3ObjectKey(key),
     ResponseContentDisposition: downloadFilename ? `attachment; filename="${downloadFilename}"` : undefined,
   });
   return getSignedUrl(getS3Client(), command, { expiresIn: 3600 });
