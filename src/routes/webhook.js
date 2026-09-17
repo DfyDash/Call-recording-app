@@ -82,17 +82,18 @@ function normalizePayload(body) {
     "phoneCall.attachments.0",
   ]);
   const occurredAt = pick(body, [
-    "phoneCall.startTime",
-    "phoneCall.endTime",
+    // GHL substitutes merge-tag values into whatever flat JSON key names the
+    // webhook body uses -- it doesn't nest by the tag's own dotted name -- so
+    // match flat key names, not "phoneCall.startTime" style paths.
+    "start_time",
+    "startTime",
+    "end_time",
+    "endTime",
     "timestamp",
     "date_added",
     "dateAdded",
-    "phoneCall.dateAdded",
-    "phoneCall.date_added",
     "call_date",
     "callDate",
-    "message.dateAdded",
-    "message.date_added",
   ]);
 
   const resolvedContactId = contactId ? String(contactId) : null;
