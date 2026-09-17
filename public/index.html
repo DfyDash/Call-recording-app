@@ -16,23 +16,50 @@
       <ul id="contact-list" class="contact-list"></ul>
     </aside>
     <main class="content">
-      <div id="empty-state" class="empty-state">Select a contact to see their call history.</div>
-      <div id="call-history" class="call-history" hidden>
-        <h2 id="contact-heading"></h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Date/Time</th>
-              <th>Direction</th>
-              <th>Duration</th>
-              <th>Handled by</th>
-              <th>Status</th>
-              <th>Recording</th>
-              <th>Transcript</th>
-            </tr>
-          </thead>
-          <tbody id="call-rows"></tbody>
-        </table>
+      <div class="filter-bar">
+        <div class="filter-contact">
+          <span id="contact-filter-label">All contacts</span>
+          <button id="clear-contact-btn" class="clear-contact-btn" hidden>&times; Clear</button>
+        </div>
+        <div class="filter-dates">
+          <button type="button" class="preset-btn" data-preset="today">Today</button>
+          <button type="button" class="preset-btn" data-preset="week">This week</button>
+          <button type="button" class="preset-btn" data-preset="month">This month</button>
+          <button type="button" class="preset-btn" data-preset="year">This year</button>
+          <label>From <input type="date" id="date-from" /></label>
+          <label>To <input type="date" id="date-to" /></label>
+        </div>
+        <label class="page-size-label">Per page
+          <select id="page-size-select">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="results-summary" class="results-summary"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Contact</th>
+            <th>Date/Time</th>
+            <th>Direction</th>
+            <th>Duration</th>
+            <th>Handled by</th>
+            <th>Status</th>
+            <th>Recording</th>
+            <th>Transcript</th>
+          </tr>
+        </thead>
+        <tbody id="call-rows"></tbody>
+      </table>
+
+      <div class="pagination">
+        <button type="button" id="prev-page-btn">&larr; Prev</button>
+        <span id="page-indicator"></span>
+        <button type="button" id="next-page-btn">Next &rarr;</button>
       </div>
     </main>
   </div>

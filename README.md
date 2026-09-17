@@ -28,10 +28,14 @@ phase 2). This phase proves the pipeline works end to end for one account.
 - `src/auth.js`, `src/routes/auth.js`, `src/routes/admin.js` — login
   sessions and admin-only user management (create/reset-password/delete
   accounts, map each to a GHL user for access control).
-- `GET /api/contacts`, `GET /api/contacts/:id/calls`, `GET /api/calls/:id/recording`
-  — read API backing the dashboard, scoped by the logged-in user's role.
-- `public/` — static dashboard (login, contact search + call history with
-  playback/download, admin user management, change password).
+- `GET /api/contacts`, `GET /api/calls`, `GET /api/calls/:id/recording` —
+  read API backing the dashboard, scoped by the logged-in user's role.
+  `GET /api/calls` is the main call search: optional `contactId` (omitted =
+  all contacts), optional `dateFrom`/`dateTo` (`YYYY-MM-DD`, inclusive), and
+  `page`/`pageSize` (20/50/100) for pagination.
+- `public/` — static dashboard (login, contact search + a paginated,
+  date-filterable call search across one or all contacts, admin user
+  management, change password).
 - Postgres for metadata (`src/db`), pluggable storage for recordings
   (`src/storage`: local disk by default, S3 when `STORAGE_DRIVER=s3`).
 - `src/transcription.js`, `src/transcriptionPoller.js` — optional call
@@ -58,6 +62,26 @@ IDs, proper ISO timestamps (no timezone ambiguity), who handled the call,
 duration, direction — so this app scans it directly instead. Zero manual
 GHL setup per account; more reliable than depending on a webhook body being
 configured exactly right.
+
+## Call search and filtering
+
+The dashboard's main view is a single call search, not a fixed "pick a
+contact first" flow: an optional contact filter (name/phone search in the
+sidebar still works, for telling apart two contacts with the same name),
+an optional date range, and pagination. Loads to **this month, all
+contacts** by default so it's never empty on first load and never pulls a
+year of data unasked.
+
+Date range: preset buttons (Today / This week / This month / This year)
+that just fill in a From/To date pair, which can also be edited directly
+for anything else — a specific month, a span of months, a prior year, any
+custom range. No hard cap on how far back it can go; a full year (or more)
+of results just means more pages.
+
+Pagination is real (`LIMIT`/`OFFSET` server-side via `db.listCalls()`, not
+fetch-everything-then-slice-in-the-browser) at 20/50/100 per page,
+selectable in the UI. `calls_occurred_at_idx` backs the date filter so this
+stays fast as history grows via `src/backfill.js`.
 
 ## Local setup
 

@@ -25,9 +25,20 @@ router.get("/contacts", async (req, res) => {
   res.json(contacts);
 });
 
-router.get("/contacts/:id/calls", async (req, res) => {
-  const calls = await db.listCallsForContact(req.params.id, listFilter(req));
-  res.json(calls);
+// The unified call-search endpoint -- contactId is optional ("all
+// contacts"), dateFrom/dateTo are optional 'YYYY-MM-DD' strings, page/
+// pageSize drive pagination (20/50/100, validated in db.listCalls).
+router.get("/calls", async (req, res) => {
+  const { contactId, dateFrom, dateTo, page, pageSize } = req.query;
+  const result = await db.listCalls({
+    contactId: contactId || undefined,
+    ghlUserId: listFilter(req),
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    page,
+    pageSize,
+  });
+  res.json(result);
 });
 
 function buildDownloadFilename(call) {

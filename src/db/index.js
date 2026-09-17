@@ -137,24 +137,54 @@ async function listContacts(search, ghlUserId) {
   return rows;
 }
 
-async function listCallsForContact(contactId, ghlUserId) {
-  const params = [contactId];
-  let condition = "";
+const PAGE_SIZES = [20, 50, 100];
+
+// The main call-search query: contactId is optional (omitted = all
+// contacts), dateFrom/dateTo are 'YYYY-MM-DD' strings and inclusive of the
+// whole day on both ends. ghlUserId is the same RBAC scoping used
+// everywhere else (a specific user's calls, or unrestricted for admins).
+async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, page = 1, pageSize = 20 } = {}) {
+  const size = PAGE_SIZES.includes(Number(pageSize)) ? Number(pageSize) : 20;
+  const pageNum = Math.max(1, Number(page) || 1);
+
+  const conditions = [];
+  const params = [];
+  if (contactId) {
+    params.push(contactId);
+    conditions.push(`c.ghl_contact_id = $${params.length}`);
+  }
   if (ghlUserId) {
     params.push(ghlUserId);
-    condition = `AND handled_by_id = $${params.length}`;
+    conditions.push(`c.handled_by_id = $${params.length}`);
   }
+  if (dateFrom) {
+    params.push(dateFrom);
+    conditions.push(`c.occurred_at >= $${params.length}::date`);
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    conditions.push(`c.occurred_at < ($${params.length}::date + interval '1 day')`);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const { rows: countRows } = await pool.query(`SELECT COUNT(*) FROM calls c ${where}`, params);
+  const total = Number(countRows[0].count);
+
+  const limitParams = [...params, size, (pageNum - 1) * size];
   const { rows } = await pool.query(
-    `SELECT id, direction, duration_seconds AS "durationSeconds",
-            occurred_at AS "occurredAt", recording_status AS "recordingStatus",
-            storage_key IS NOT NULL AS "hasRecording", handled_by_name AS "handledByName",
-            transcription_status AS "transcriptionStatus"
-     FROM calls
-     WHERE ghl_contact_id = $1 ${condition}
-     ORDER BY occurred_at DESC NULLS LAST, created_at DESC`,
-    params
+    `SELECT c.id, c.direction, c.duration_seconds AS "durationSeconds",
+            c.occurred_at AS "occurredAt", c.recording_status AS "recordingStatus",
+            c.storage_key IS NOT NULL AS "hasRecording", c.handled_by_name AS "handledByName",
+            c.transcription_status AS "transcriptionStatus",
+            c.ghl_contact_id AS "contactId", ct.name AS "contactName", ct.phone AS "contactPhone"
+     FROM calls c
+     LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     ${where}
+     ORDER BY c.occurred_at DESC NULLS LAST, c.created_at DESC
+     LIMIT $${limitParams.length - 1} OFFSET $${limitParams.length}`,
+    limitParams
   );
-  return rows;
+  return { calls: rows, total, page: pageNum, pageSize: size };
 }
 
 async function getCall(callId) {
@@ -270,7 +300,7 @@ module.exports = {
   listPendingTranscriptions,
   updateCallHandler,
   listContacts,
-  listCallsForContact,
+  listCalls,
   getCall,
   createUser,
   getUserByUsername,

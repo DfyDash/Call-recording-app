@@ -43,6 +43,7 @@ ALTER TABLE calls ADD CONSTRAINT calls_transcription_status_check
 
 CREATE INDEX IF NOT EXISTS calls_contact_idx ON calls (ghl_contact_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS calls_handled_by_idx ON calls (handled_by_id);
+CREATE INDEX IF NOT EXISTS calls_occurred_at_idx ON calls (occurred_at DESC);
 
 -- Dashboard login accounts. Not linked to GHL's own user system (no OAuth
 -- in this phase) -- an admin creates accounts here and maps each one to the

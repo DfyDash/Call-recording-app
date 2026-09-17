@@ -1,15 +1,68 @@
 const searchInput = document.getElementById("search");
 const contactList = document.getElementById("contact-list");
-const emptyState = document.getElementById("empty-state");
-const callHistory = document.getElementById("call-history");
-const contactHeading = document.getElementById("contact-heading");
 const callRows = document.getElementById("call-rows");
 const sessionBar = document.getElementById("session-bar");
 const viewAsSelect = document.getElementById("view-as");
+const contactFilterLabel = document.getElementById("contact-filter-label");
+const clearContactBtn = document.getElementById("clear-contact-btn");
+const dateFromInput = document.getElementById("date-from");
+const dateToInput = document.getElementById("date-to");
+const pageSizeSelect = document.getElementById("page-size-select");
+const resultsSummary = document.getElementById("results-summary");
+const pageIndicator = document.getElementById("page-indicator");
+const prevPageBtn = document.getElementById("prev-page-btn");
+const nextPageBtn = document.getElementById("next-page-btn");
 
-let activeContactId = null;
 let viewAs = "";
 let transcriptionEnabled = false;
+
+// Default view: this month, all contacts -- never an empty screen on load,
+// never pulling a year of data unasked either.
+const state = {
+  contactId: null,
+  contactLabel: "All contacts",
+  dateFrom: "",
+  dateTo: "",
+  page: 1,
+  pageSize: 20,
+};
+
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function presetRange(preset) {
+  const now = new Date();
+  if (preset === "today") return { from: fmtDate(now), to: fmtDate(now) };
+  if (preset === "week") {
+    const from = new Date(now);
+    from.setDate(now.getDate() - now.getDay());
+    const to = new Date(from);
+    to.setDate(from.getDate() + 6);
+    return { from: fmtDate(from), to: fmtDate(to) };
+  }
+  if (preset === "month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { from: fmtDate(from), to: fmtDate(to) };
+  }
+  if (preset === "year") {
+    return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
+  }
+  return { from: "", to: "" };
+}
+
+function applyDateRange(from, to) {
+  state.dateFrom = from;
+  state.dateTo = to;
+  dateFromInput.value = from;
+  dateToInput.value = to;
+  state.page = 1;
+  loadCalls();
+}
 
 async function loadSession() {
   const res = await fetch("/api/me");
@@ -33,9 +86,8 @@ async function loadViewAsOptions() {
 
   viewAsSelect.addEventListener("change", () => {
     viewAs = viewAsSelect.value;
-    activeContactId = null;
-    emptyState.hidden = false;
-    callHistory.hidden = true;
+    state.page = 1;
+    loadCalls();
     loadContacts(searchInput.value.trim());
   });
 }
@@ -54,23 +106,37 @@ function renderContacts(contacts) {
   contactList.innerHTML = "";
   for (const contact of contacts) {
     const li = document.createElement("li");
-    li.className = contact.id === activeContactId ? "active" : "";
+    li.className = contact.id === state.contactId ? "active" : "";
+    li.dataset.contactId = contact.id;
     li.innerHTML = `${escapeHtml(contact.name || "(no name)")}<span class="contact-phone">${escapeHtml(contact.phone || "")}</span>`;
     li.addEventListener("click", () => selectContact(contact));
     contactList.appendChild(li);
   }
 }
 
-async function selectContact(contact) {
-  activeContactId = contact.id;
-  emptyState.hidden = true;
-  callHistory.hidden = false;
-  contactHeading.textContent = contact.name || contact.phone || contact.id;
+function selectContact(contact) {
+  state.contactId = contact.id;
+  state.contactLabel = contact.name || contact.phone || contact.id;
+  state.page = 1;
+  updateContactFilterUi();
+  loadCalls();
+  document.querySelectorAll(".contact-list li").forEach((li) => {
+    li.classList.toggle("active", li.dataset.contactId === contact.id);
+  });
+}
 
-  const query = viewAs ? `?viewAs=${encodeURIComponent(viewAs)}` : "";
-  const res = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/calls${query}`);
-  const calls = await res.json();
-  renderCalls(calls);
+function clearContactFilter() {
+  state.contactId = null;
+  state.contactLabel = "All contacts";
+  state.page = 1;
+  updateContactFilterUi();
+  loadCalls();
+  document.querySelectorAll(".contact-list li").forEach((li) => li.classList.remove("active"));
+}
+
+function updateContactFilterUi() {
+  contactFilterLabel.textContent = state.contactId ? `Contact: ${state.contactLabel}` : "All contacts";
+  clearContactBtn.hidden = !state.contactId;
 }
 
 function transcriptCell(call) {
@@ -93,12 +159,33 @@ function transcriptCell(call) {
   }
 }
 
-function renderCalls(calls) {
+async function loadCalls() {
+  const params = new URLSearchParams();
+  if (state.contactId) params.set("contactId", state.contactId);
+  if (state.dateFrom) params.set("dateFrom", state.dateFrom);
+  if (state.dateTo) params.set("dateTo", state.dateTo);
+  if (viewAs) params.set("viewAs", viewAs);
+  params.set("page", state.page);
+  params.set("pageSize", state.pageSize);
+
+  const res = await fetch(`/api/calls?${params.toString()}`);
+  const data = await res.json();
+  renderCalls(data);
+}
+
+function renderCalls(data) {
+  const { calls, total, page, pageSize } = data;
   callRows.innerHTML = "";
+
+  if (calls.length === 0) {
+    callRows.innerHTML = `<tr><td colspan="8" class="empty-state">No calls match this filter.</td></tr>`;
+  }
+
   for (const call of calls) {
     const tr = document.createElement("tr");
     const when = call.occurredAt ? new Date(call.occurredAt).toLocaleString() : "-";
     const duration = call.durationSeconds != null ? `${Math.round(call.durationSeconds)}s` : "-";
+    const contactCell = `${escapeHtml(call.contactName || "(no name)")}<span class="contact-phone">${escapeHtml(call.contactPhone || "")}</span>`;
     const recordingCell = call.hasRecording
       ? `<div class="recording-cell">
            <audio controls src="/api/calls/${call.id}/recording"></audio>
@@ -107,6 +194,7 @@ function renderCalls(calls) {
       : `<span>${call.recordingStatus === "failed" ? "fetch failed" : "no recording"}</span>`;
 
     tr.innerHTML = `
+      <td>${contactCell}</td>
       <td>${when}</td>
       <td>${escapeHtml(call.direction || "-")}</td>
       <td>${duration}</td>
@@ -117,6 +205,12 @@ function renderCalls(calls) {
     `;
     callRows.appendChild(tr);
   }
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  resultsSummary.textContent = total === 0 ? "0 calls" : `${total} call${total === 1 ? "" : "s"} found`;
+  pageIndicator.textContent = `Page ${page} of ${totalPages}`;
+  prevPageBtn.disabled = page <= 1;
+  nextPageBtn.disabled = page >= totalPages;
 }
 
 // Transcript text is fetched lazily, only when a row's <details> is opened
@@ -168,5 +262,44 @@ searchInput.addEventListener("input", () => {
   searchTimer = setTimeout(() => loadContacts(searchInput.value.trim()), 200);
 });
 
+clearContactBtn.addEventListener("click", clearContactFilter);
+
+document.querySelectorAll(".preset-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const { from, to } = presetRange(btn.dataset.preset);
+    applyDateRange(from, to);
+  });
+});
+
+dateFromInput.addEventListener("change", () => applyDateRange(dateFromInput.value, state.dateTo));
+dateToInput.addEventListener("change", () => applyDateRange(state.dateFrom, dateToInput.value));
+
+pageSizeSelect.addEventListener("change", () => {
+  state.pageSize = Number(pageSizeSelect.value);
+  state.page = 1;
+  loadCalls();
+});
+
+prevPageBtn.addEventListener("click", () => {
+  if (state.page > 1) {
+    state.page -= 1;
+    loadCalls();
+  }
+});
+
+nextPageBtn.addEventListener("click", () => {
+  state.page += 1;
+  loadCalls();
+});
+
+// Initial view: this month, all contacts.
+const initialRange = presetRange("month");
+state.dateFrom = initialRange.from;
+state.dateTo = initialRange.to;
+dateFromInput.value = state.dateFrom;
+dateToInput.value = state.dateTo;
+updateContactFilterUi();
+
 loadSession();
 loadContacts();
+loadCalls();
