@@ -1,20 +1,45 @@
 const NodeID3 = require("node-id3");
 
+// occurredAt is always stored as a true UTC instant, but a timestamp shown
+// to a human (in the file's own metadata, where nothing can auto-adjust for
+// the viewer the way a browser does) needs to be in the account's own
+// timezone -- otherwise a call at 9pm local shows as the next day in UTC,
+// which is exactly backwards for someone trying to find "that 9pm call".
+function parseOffsetMinutes(offset) {
+  const match = /^([+-])(\d{2}):(\d{2})$/.exec(offset);
+  if (!match) return 0;
+  const sign = match[1] === "-" ? -1 : 1;
+  return sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10));
+}
+
+function toAccountLocal(date) {
+  const offset = process.env.GHL_ACCOUNT_UTC_OFFSET || "-07:00";
+  const shifted = new Date(date.getTime() + parseOffsetMinutes(offset) * 60000);
+  const hours = parseOffsetMinutes(offset) / 60;
+  return { shifted, offsetLabel: `UTC${hours >= 0 ? "+" : ""}${hours}` };
+}
+
+function formatTimestamp(date) {
+  const { shifted, offsetLabel } = toAccountLocal(date);
+  let hours = shifted.getUTCHours();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  const minutes = String(shifted.getUTCMinutes()).padStart(2, "0");
+  const datePart = shifted.toISOString().slice(0, 10);
+  // "2026-09-16 9:57 PM (UTC-7)" -- readable, and shows up wherever Title
+  // does, since many basic file-properties viewers (unlike this app's own
+  // dashboard) don't surface a Comment/Date field at all.
+  return `${datePart} ${hours}:${minutes} ${ampm} (${offsetLabel})`;
+}
+
 function buildComment({ occurredAt, direction, durationSeconds, contactName, phone }) {
   const parts = [];
-  if (occurredAt) parts.push(`Recorded: ${occurredAt.toISOString()}`);
+  if (occurredAt) parts.push(`Recorded: ${formatTimestamp(occurredAt)}`);
   if (direction) parts.push(`Direction: ${direction}`);
   if (durationSeconds != null) parts.push(`Duration: ${durationSeconds}s`);
   const who = contactName || phone;
   if (who) parts.push(`Contact: ${who}`);
   return parts.join(" | ");
-}
-
-function formatTimestamp(date) {
-  // "2026-09-17 04:57 UTC" -- readable, and shows up wherever Title does,
-  // since many basic file-properties viewers (unlike this app's own
-  // dashboard) don't surface a Comment/Date field at all.
-  return `${date.toISOString().replace("T", " ").slice(0, 16)} UTC`;
 }
 
 function buildTitle({ occurredAt, contactName, phone, direction }) {
@@ -66,7 +91,7 @@ function embedWavMetadata(buffer, meta) {
   }
 
   const fields = {
-    ICRD: meta.occurredAt ? meta.occurredAt.toISOString().slice(0, 10) : null,
+    ICRD: meta.occurredAt ? toAccountLocal(meta.occurredAt).shifted.toISOString().slice(0, 10) : null,
     INAM: buildTitle(meta),
     ICMT: buildComment(meta),
     IART: meta.contactName || meta.phone || null,
