@@ -29,14 +29,15 @@ async function insertCall({
   rawPayload,
   handledById,
   handledByName,
+  disposition,
 }) {
   const result = await pool.query(
     `INSERT INTO calls (
        id, ghl_call_id, ghl_contact_id, direction, duration_seconds,
        occurred_at, source_recording_url, recording_status, raw_payload,
-       handled_by_id, handled_by_name
+       handled_by_id, handled_by_name, disposition
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11)
      ON CONFLICT (ghl_call_id) DO NOTHING
      RETURNING id`,
     [
@@ -50,6 +51,7 @@ async function insertCall({
       rawPayload || null,
       handledById || null,
       handledByName || null,
+      disposition || null,
     ]
   );
   return result.rows[0] || null;
@@ -100,6 +102,14 @@ async function markCallFailed(callId) {
     `UPDATE calls SET recording_status = 'failed' WHERE id = $1`,
     [callId]
   );
+}
+
+// The disposition captured at insert time can be stale (e.g. "ringing" for
+// a call that has since completed) -- src/poller.js's retryFailedRecordings
+// refreshes it whenever it re-checks a failed call, independent of whether
+// a recording turned up.
+async function updateCallDisposition(callId, disposition) {
+  await pool.query(`UPDATE calls SET disposition = $2 WHERE id = $1`, [callId, disposition || null]);
 }
 
 // --- transcription (src/transcription.js, src/transcriptionPoller.js) ---
@@ -200,6 +210,7 @@ async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, page = 1, pag
   const { rows } = await pool.query(
     `SELECT c.id, c.direction, c.duration_seconds AS "durationSeconds",
             c.occurred_at AS "occurredAt", c.recording_status AS "recordingStatus",
+            c.disposition,
             c.storage_key IS NOT NULL AS "hasRecording", c.handled_by_name AS "handledByName",
             c.transcription_status AS "transcriptionStatus",
             c.ghl_contact_id AS "contactId", ct.name AS "contactName", ct.phone AS "contactPhone"
@@ -416,6 +427,7 @@ module.exports = {
   getCallByGhlId,
   markCallStored,
   markCallFailed,
+  updateCallDisposition,
   listRetryableFailedCalls,
   markTranscriptionPending,
   markTranscriptionComplete,

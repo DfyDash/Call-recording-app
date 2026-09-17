@@ -41,6 +41,17 @@ ALTER TABLE calls DROP CONSTRAINT IF EXISTS calls_transcription_status_check;
 ALTER TABLE calls ADD CONSTRAINT calls_transcription_status_check
   CHECK (transcription_status IN ('none', 'pending', 'completed', 'failed'));
 
+-- GHL's own call disposition (completed / no-answer / busy / canceled /
+-- voicemail / ...). Most of these never have a recording -- there was
+-- nothing to record -- so the dashboard needs this to tell "no recording
+-- because no one answered" apart from "no recording despite the call
+-- connecting", which is the only case actually worth investigating.
+-- Backfilled from raw_payload for existing rows; new rows get it directly
+-- at insert time.
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS disposition TEXT;
+UPDATE calls SET disposition = COALESCE(raw_payload->>'status', raw_payload->'meta'->'call'->>'status')
+  WHERE disposition IS NULL AND raw_payload IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS calls_contact_idx ON calls (ghl_contact_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS calls_handled_by_idx ON calls (handled_by_id);
 CREATE INDEX IF NOT EXISTS calls_occurred_at_idx ON calls (occurred_at DESC);

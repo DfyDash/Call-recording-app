@@ -175,6 +175,15 @@ async function loadCalls() {
   renderCalls(data);
 }
 
+// GHL's own call disposition, formatted for display ("no-answer" -> "No
+// answer"). This is what actually explains why most "no recording" calls
+// have nothing to play -- the call was never answered, not that fetching
+// the recording failed.
+function dispositionLabel(disposition) {
+  if (!disposition) return null;
+  return disposition.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function renderCalls(data) {
   const { calls, total, page, pageSize } = data;
   callRows.innerHTML = "";
@@ -188,12 +197,20 @@ function renderCalls(data) {
     const when = call.occurredAt ? new Date(call.occurredAt).toLocaleString() : "-";
     const duration = call.durationSeconds != null ? `${Math.round(call.durationSeconds)}s` : "-";
     const contactCell = `${escapeHtml(call.contactName || "(no name)")}<span class="contact-phone">${escapeHtml(call.contactPhone || "")}</span>`;
+    const disposition = dispositionLabel(call.disposition);
+    // A call GHL disposed as anything other than "Completed" (no answer,
+    // busy, canceled, voicemail...) was never going to have a recording --
+    // that's the call's own outcome, not something CallTrove failed to
+    // fetch. Only an unexplained gap on a completed call is worth a
+    // less certain-sounding label.
+    const noRecordingReason =
+      disposition && call.disposition !== "completed" ? disposition : "No recording found";
     const recordingCell = call.hasRecording
       ? `<div class="recording-cell">
            <audio controls src="/api/calls/${call.id}/recording"></audio>
            <a class="download-link" href="/api/calls/${call.id}/recording?download" download>Download</a>
          </div>`
-      : `<span>${call.recordingStatus === "failed" ? "fetch failed" : "no recording"}</span>`;
+      : `<span>${escapeHtml(noRecordingReason)}</span>`;
 
     tr.innerHTML = `
       <td>${contactCell}</td>
@@ -201,7 +218,7 @@ function renderCalls(data) {
       <td>${escapeHtml(call.direction || "-")}</td>
       <td>${duration}</td>
       <td>${escapeHtml(call.handledByName || "-")}</td>
-      <td>${escapeHtml(call.recordingStatus)}</td>
+      <td>${escapeHtml(disposition || "-")}</td>
       <td>${recordingCell}</td>
       <td>${transcriptCell(call)}</td>
     `;

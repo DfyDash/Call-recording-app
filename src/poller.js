@@ -34,6 +34,14 @@ const FAILED_RECORDING_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 // auto_transcribe_enabled setting is read fresh per call here, so flipping
 // it in the admin UI affects only calls the live poller picks up from that
 // point on, never anything already in the database.
+// GHL's own disposition for the call (completed / no-answer / busy /
+// canceled / voicemail / ...) -- distinct from our recording_status, and
+// the reason most "no recording" calls have nothing to fetch in the first
+// place: a call that was never answered was never going to have audio.
+function getDisposition(message) {
+  return message.status || (message.meta && message.meta.call && message.meta.call.status) || null;
+}
+
 async function processCallMessage(conversation, message, { checkAutoTranscribe = false } = {}) {
   const contactId = conversation.contactId;
   if (!contactId) return;
@@ -56,6 +64,7 @@ async function processCallMessage(conversation, message, { checkAutoTranscribe =
     rawPayload: message,
     handledById: message.userId || null,
     handledByName: await ghlApi.getUserName(message.userId).catch(() => null),
+    disposition: getDisposition(message),
   });
 
   if (!inserted) return; // already processed this call
@@ -112,8 +121,9 @@ async function retryFailedRecordings(maxAgeMs = FAILED_RECORDING_RETRY_WINDOW_MS
     const message = messages.find((m) => m.id === call.ghlCallId);
     if (!message) continue;
 
-    const status = message.meta && message.meta.call && message.meta.call.status;
-    if (status === "ringing") continue; // call not actually finished yet, try again next cycle
+    const disposition = getDisposition(message);
+    await db.updateCallDisposition(call.id, disposition);
+    if (disposition === "ringing") continue; // call not actually finished yet, try again next cycle
 
     try {
       const recording = await ghlApi.downloadRecording(call.ghlCallId);
