@@ -157,6 +157,13 @@ audio {
   color: #16794f;
 }
 
+.forgot-password {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .session-bar {
   display: flex;
   align-items: center;
