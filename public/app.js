@@ -43,7 +43,10 @@ function renderCalls(calls) {
     const when = call.occurredAt ? new Date(call.occurredAt).toLocaleString() : "-";
     const duration = call.durationSeconds != null ? `${Math.round(call.durationSeconds)}s` : "-";
     const recordingCell = call.hasRecording
-      ? `<audio controls src="/api/calls/${call.id}/recording"></audio>`
+      ? `<div class="recording-cell">
+           <audio controls src="/api/calls/${call.id}/recording"></audio>
+           <a class="download-link" href="/api/calls/${call.id}/recording?download" download>Download</a>
+         </div>`
       : `<span>${call.recordingStatus === "failed" ? "fetch failed" : "no recording"}</span>`;
 
     tr.innerHTML = `

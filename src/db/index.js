@@ -99,8 +99,12 @@ async function listCallsForContact(contactId) {
 
 async function getCall(callId) {
   const { rows } = await pool.query(
-    `SELECT id, storage_key AS "storageKey", recording_status AS "recordingStatus"
-     FROM calls WHERE id = $1`,
+    `SELECT c.id, c.storage_key AS "storageKey", c.recording_status AS "recordingStatus",
+            c.occurred_at AS "occurredAt", c.direction, c.ghl_contact_id AS "contactId",
+            ct.name, ct.phone
+     FROM calls c
+     LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     WHERE c.id = $1`,
     [callId]
   );
   return rows[0] || null;

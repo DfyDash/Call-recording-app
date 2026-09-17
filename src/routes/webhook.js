@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const db = require("../db");
 const { saveRecording } = require("../storage");
 const ghlApi = require("../ghlApi");
+const { embedMetadata } = require("../audioMetadata");
 
 const router = express.Router();
 
@@ -209,8 +210,16 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
         extension = recording.contentType.includes("wav") ? "wav" : "mp3";
       }
 
+      const taggedBuffer = embedMetadata(buffer, extension, {
+        occurredAt: parsed.occurredAt,
+        direction: parsed.direction,
+        durationSeconds: parsed.durationSeconds,
+        contactName: parsed.name,
+        phone: parsed.phone,
+      });
+
       const key = `${parsed.contactId}/${callRowId}.${extension}`;
-      await saveRecording(key, buffer);
+      await saveRecording(key, taggedBuffer);
       await db.markCallStored(callRowId, key);
       return res.status(200).json({ status: "ok", callId: callRowId });
     } catch (err) {

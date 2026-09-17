@@ -84,3 +84,14 @@ audio {
   height: 32px;
   max-width: 260px;
 }
+
+.recording-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.download-link {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}

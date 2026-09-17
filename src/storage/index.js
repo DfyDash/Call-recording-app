@@ -43,12 +43,13 @@ async function s3Save(key, buffer) {
   return key;
 }
 
-async function s3GetPresignedUrl(key) {
+async function s3GetPresignedUrl(key, downloadFilename) {
   const { GetObjectCommand } = require("@aws-sdk/client-s3");
   const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
   const command = new GetObjectCommand({
     Bucket: process.env.S3_BUCKET,
     Key: key,
+    ResponseContentDisposition: downloadFilename ? `attachment; filename="${downloadFilename}"` : undefined,
   });
   return getSignedUrl(getS3Client(), command, { expiresIn: 3600 });
 }
@@ -61,10 +62,11 @@ async function saveRecording(key, buffer) {
 }
 
 // Returns either a redirect URL (s3) or a stream to pipe (local).
-// Callers check which field is set.
-async function getPlayback(key) {
+// Callers check which field is set. downloadFilename, if given, requests
+// that the response be presented as an attachment with that filename.
+async function getPlayback(key, downloadFilename) {
   if (driver === "s3") {
-    return { redirectUrl: await s3GetPresignedUrl(key) };
+    return { redirectUrl: await s3GetPresignedUrl(key, downloadFilename) };
   }
   const stream = localGetStream(key);
   return { stream };
