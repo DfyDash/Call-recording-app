@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const db = require("../db");
 const ghlApi = require("../ghlApi");
 const { hashPassword, requireAdmin, requireCsrf } = require("../auth");
+const { loginLimiter, limiterKey } = require("./auth");
 
 const router = express.Router();
 
@@ -65,6 +66,12 @@ router.put("/users/:id", requireCsrf, async (req, res) => {
     update.passwordSalt = salt;
   }
   await db.updateUser(req.params.id, update);
+
+  // A reset should actually unlock them, not leave them waiting out the
+  // login rate limit's window under their old, now-wrong password.
+  if (password && target) {
+    await loginLimiter.resetKey(limiterKey(target.username));
+  }
 
   const who = target ? target.username : req.params.id;
   const changes = [];

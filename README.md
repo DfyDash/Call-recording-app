@@ -254,7 +254,16 @@ Beyond auth/RBAC/audit logging (covered above):
   origin), and COEP's default would block that `<audio>` load since S3
   doesn't send back a matching `Cross-Origin-Resource-Policy` header.
 - **Login rate-limiting** — `express-rate-limit` on `POST /auth/login`
-  specifically (20 attempts/15min per IP), not the whole app.
+  specifically, not the whole app: 5 attempts per 30 minutes, keyed by the
+  submitted **username**, not IP. IP-keying meant one person mistyping
+  their password could lock out every coworker sharing the same office/
+  VPN address, and an admin's password reset couldn't actually unlock
+  someone since the counter lived against the IP, not the account.
+  Username-keying also closes the standard bypass of switching IPs to
+  dodge an IP-based limit. Cleared early (`loginLimiter.resetKey()`) on a
+  successful login or an admin password reset, rather than left to expire
+  on its own -- a reset should actually unlock someone immediately, not
+  leave them waiting out the window under their old, now-wrong password.
 - **CSRF protection** — a session-bound token issued on login, handed to
   the client via `GET /api/me`. Checked as an `X-CSRF-Token` header on
   the JSON API's mutating routes (`src/auth.js`'s `requireCsrf`), and as

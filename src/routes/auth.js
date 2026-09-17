@@ -6,13 +6,29 @@ const { verifyPassword, hashPassword, sessionUser } = require("../auth");
 
 const router = express.Router();
 
+function limiterKey(username) {
+  return username.trim().toLowerCase();
+}
+
 // Scoped to the login route specifically -- this is the actual
-// brute-force target, not the rest of the app. Keyed by IP (the default).
+// brute-force target, not the rest of the app. Keyed by the submitted
+// username, not IP: IP-keying meant one coworker mistyping their password
+// a few times could lock out everyone else sharing the same office/VPN
+// address, and a targeted password reset from an admin couldn't actually
+// unlock the account since the counter lived against the IP, not the
+// user. Username-keying also closes the standard bypass where an
+// attacker just switches IPs to dodge an IP-based limit. The tradeoff:
+// someone could try to lock out one specific known username from many
+// IPs -- an acceptable risk here since usernames aren't publicly listed
+// anywhere. Cleared early on a successful login or an admin password
+// reset (see the /login handler below and routes/admin.js), not just
+// left to expire on its own.
 const loginLimiter = rateLimit({
   windowMs: 30 * 60 * 1000,
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => (req.body && req.body.username ? limiterKey(req.body.username) : req.ip),
 });
 
 // req.body.csrfToken is a hidden form field on the two classic HTML-form
@@ -24,12 +40,13 @@ function csrfValid(req) {
   return Boolean(req.session.csrfToken) && req.body.csrfToken === req.session.csrfToken;
 }
 
-router.post("/login", loginLimiter, express.urlencoded({ extended: false }), async (req, res) => {
+router.post("/login", express.urlencoded({ extended: false }), loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   const user = username && password ? await db.getUserByUsername(username) : null;
   if (!user || !verifyPassword(password, user.passwordHash, user.passwordSalt)) {
     return res.redirect("/login.html?error=1");
   }
+  await loginLimiter.resetKey(limiterKey(username));
   req.session.user = sessionUser(user);
   req.session.csrfToken = randomBytes(24).toString("hex");
   res.redirect("/");
@@ -68,3 +85,5 @@ router.post("/change-password", express.urlencoded({ extended: false }), async (
 });
 
 module.exports = router;
+module.exports.loginLimiter = loginLimiter;
+module.exports.limiterKey = limiterKey;
