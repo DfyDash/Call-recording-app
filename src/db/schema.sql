@@ -1,4 +1,4 @@
--- Call Recording Vault schema (prototype phase).
+-- CallTrove schema (prototype phase).
 -- No encryption-at-rest / access-control columns yet -- that's phase 2 (HIPAA).
 
 CREATE TABLE IF NOT EXISTS contacts (

@@ -1,5 +1,5 @@
 {
-  "name": "call-recording-vault",
+  "name": "calltrove",
   "version": "0.1.0",
   "description": "GHL call recording capture pipeline: webhook ingestion, recording storage, and per-contact call history dashboard",
   "private": true,

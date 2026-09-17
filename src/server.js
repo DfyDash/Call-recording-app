@@ -37,7 +37,7 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`Call Recording Vault listening on port ${port}`);
+  console.log(`CallTrove listening on port ${port}`);
 });
 
 // Call ingestion now happens by polling GHL's own API rather than a GHL
