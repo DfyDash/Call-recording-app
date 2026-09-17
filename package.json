@@ -1,0 +1,22 @@
+{
+  "name": "call-recording-vault",
+  "version": "0.1.0",
+  "description": "GHL call recording capture pipeline: webhook ingestion, recording storage, and per-contact call history dashboard",
+  "private": true,
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/db/migrate.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.626.0",
+    "@aws-sdk/s3-request-presigner": "^3.626.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}

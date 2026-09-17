@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Call Recording Vault</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Call Recording Vault</h1>
+      <input id="search" type="search" placeholder="Search contacts by name or phone..." />
+      <ul id="contact-list" class="contact-list"></ul>
+    </aside>
+    <main class="content">
+      <div id="empty-state" class="empty-state">Select a contact to see their call history.</div>
+      <div id="call-history" class="call-history" hidden>
+        <h2 id="contact-heading"></h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Date/Time</th>
+              <th>Direction</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Recording</th>
+            </tr>
+          </thead>
+          <tbody id="call-rows"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
