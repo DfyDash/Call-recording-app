@@ -19,10 +19,13 @@ function limiterKey(username) {
 // user. Username-keying also closes the standard bypass where an
 // attacker just switches IPs to dodge an IP-based limit. The tradeoff:
 // someone could try to lock out one specific known username from many
-// IPs -- an acceptable risk here since usernames aren't publicly listed
-// anywhere. Cleared early on a successful login or an admin password
-// reset (see the /login handler below and routes/admin.js), not just
-// left to expire on its own.
+// IPs -- there's no published username list, guessing still takes real
+// reconnaissance (naming-pattern guesses, credential-stuffing from an
+// unrelated breach), and the timing side-channel that would have made
+// enumeration easy is closed below (the dummy-hash comparison). Cleared
+// early on a successful login or an admin password reset (see the
+// /login handler below and routes/admin.js), not just left to expire on
+// its own.
 const loginLimiter = rateLimit({
   windowMs: 30 * 60 * 1000,
   limit: 5,
@@ -40,10 +43,20 @@ function csrfValid(req) {
   return Boolean(req.session.csrfToken) && req.body.csrfToken === req.session.csrfToken;
 }
 
+// A fixed dummy hash/salt, generated once at startup -- used below so a
+// login attempt against a username that doesn't exist still runs the same
+// expensive scrypt computation a real one would. Without this, a
+// nonexistent username short-circuits and returns fast, while a real one
+// always pays for the hash before failing on a wrong password -- a timing
+// difference an attacker can use to enumerate valid usernames just by
+// measuring response time, no leaked list required.
+const { hash: dummyHash, salt: dummySalt } = hashPassword(randomBytes(32).toString("hex"));
+
 router.post("/login", express.urlencoded({ extended: false }), loginLimiter, async (req, res) => {
   const { username, password } = req.body;
-  const user = username && password ? await db.getUserByUsername(username) : null;
-  if (!user || !verifyPassword(password, user.passwordHash, user.passwordSalt)) {
+  const user = username ? await db.getUserByUsername(username) : null;
+  const valid = password ? verifyPassword(password, user ? user.passwordHash : dummyHash, user ? user.passwordSalt : dummySalt) : false;
+  if (!user || !valid) {
     return res.redirect("/login.html?error=1");
   }
   await loginLimiter.resetKey(limiterKey(username));

@@ -264,6 +264,16 @@ Beyond auth/RBAC/audit logging (covered above):
   successful login or an admin password reset, rather than left to expire
   on its own -- a reset should actually unlock someone immediately, not
   leave them waiting out the window under their old, now-wrong password.
+- **Login timing attack closed** — the login route used to short-circuit
+  on a nonexistent username (skipping the password hash entirely) but
+  always run the full scrypt computation for a real one before failing a
+  wrong password. Measured locally: ~0ms for a nonexistent username vs.
+  ~45ms for a real one -- an easily measurable gap an attacker could use
+  to enumerate valid usernames purely by timing responses, no leaked list
+  needed (which mattered more once the rate limiter above became
+  username-keyed). Fixed by always running the same hash computation,
+  against a fixed dummy hash/salt when there's no real user, so both
+  cases take the same time.
 - **CSRF protection** — a session-bound token issued on login, handed to
   the client via `GET /api/me`. Checked as an `X-CSRF-Token` header on
   the JSON API's mutating routes (`src/auth.js`'s `requireCsrf`), and as
