@@ -39,17 +39,34 @@ function normalizePayload(body) {
   ]) || [pick(body, ["first_name", "contact.first_name"]), pick(body, ["last_name", "contact.last_name"])]
     .filter(Boolean)
     .join(" ") || null;
-  const phone = pick(body, ["phone", "contact.phone", "message.phone"]);
-  // GHL models calls as Conversation "messages" internally, so call data is
-  // often exposed under message.* merge tags rather than call.* ones.
-  const callId = pick(body, ["call_id", "callId", "id", "message_id", "messageId", "message.id"]);
-  const direction = pick(body, ["direction", "call_direction", "callDirection", "message.direction"]);
+  const phone = pick(body, ["phone", "contact.phone", "message.phone", "phoneCall.phone"]);
+  // GHL's merge-field picker confirmed the namespace is phoneCall.* for this
+  // trigger (e.g. phoneCall.duration) -- not call.* or message.* as guessed
+  // earlier. Keep the old variants too in case they're used elsewhere.
+  const callId = pick(body, [
+    "call_id",
+    "callId",
+    "id",
+    "message_id",
+    "messageId",
+    "message.id",
+    "phoneCall.id",
+    "phoneCall.callId",
+  ]);
+  const direction = pick(body, [
+    "direction",
+    "call_direction",
+    "callDirection",
+    "message.direction",
+    "phoneCall.direction",
+  ]);
   const duration = pick(body, [
     "duration",
     "call_duration",
     "durationInSeconds",
     "callDuration",
     "message.duration",
+    "phoneCall.duration",
   ]);
   const recordingUrl = pick(body, [
     "recording_url",
@@ -59,11 +76,16 @@ function normalizePayload(body) {
     "message.recordingUrl",
     "message.attachments.0",
     "attachments.0",
+    "phoneCall.recordingUrl",
+    "phoneCall.recording_url",
+    "phoneCall.attachments.0",
   ]);
   const occurredAt = pick(body, [
     "timestamp",
     "date_added",
     "dateAdded",
+    "phoneCall.dateAdded",
+    "phoneCall.date_added",
     "call_date",
     "callDate",
     "message.dateAdded",
