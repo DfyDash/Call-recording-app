@@ -17,7 +17,16 @@ app.set("trust proxy", 1); // behind nginx, which terminates TLS
 
 // Everything served here is self-hosted (no CDNs, no third-party scripts/
 // styles/fonts anywhere in the app), so the CSP can stay tight instead of
-// needing 'unsafe-inline' or a growing allowlist.
+// needing 'unsafe-inline' or a growing allowlist. The one exception is
+// mediaSrc: recording playback redirects to a presigned S3 URL when
+// STORAGE_DRIVER=s3 (a different origin than the app itself), so that
+// origin has to be allowed explicitly or the browser silently refuses to
+// load the audio -- the <audio> element renders, but nothing plays.
+const mediaSrc = ["'self'"];
+if (process.env.STORAGE_DRIVER === "s3" && process.env.S3_BUCKET) {
+  mediaSrc.push(`https://${process.env.S3_BUCKET}.s3.${process.env.S3_REGION || "us-east-1"}.amazonaws.com`);
+}
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -27,18 +36,17 @@ app.use(
         styleSrc: ["'self'"],
         imgSrc: ["'self'"],
         connectSrc: ["'self'"],
-        mediaSrc: ["'self'"],
+        mediaSrc,
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         frameAncestors: ["'none'"],
       },
     },
-    // Off: recording playback redirects to a presigned S3 URL when
-    // STORAGE_DRIVER=s3 (a different origin), and COEP's default
-    // "require-corp" would block that <audio> load unless S3 sent back a
-    // matching Cross-Origin-Resource-Policy header, which it doesn't by
-    // default. Not worth the breakage for an app with no need for the
-    // cross-origin isolation COEP exists to provide.
+    // Off: the same cross-origin S3 redirect mediaSrc allows above would
+    // still get blocked by COEP's default "require-corp", which needs a
+    // matching Cross-Origin-Resource-Policy header back from S3 that it
+    // doesn't send by default. Not worth the breakage for an app with no
+    // need for the cross-origin isolation COEP exists to provide.
     crossOriginEmbedderPolicy: false,
   })
 );
