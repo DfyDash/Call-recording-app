@@ -98,4 +98,18 @@ async function getAccountTimezone() {
   return timezone;
 }
 
-module.exports = { isConfigured, findCallRecording, getAccountTimezone };
+// Fetches the sub-account's GHL user list, trimmed to just what the admin
+// UI needs to map a login account to the identity that appears on their
+// calls -- not the full response, which includes each user's entire GHL
+// permission-scope list and other internal detail with no reason to leave
+// this server.
+async function listUsers() {
+  const url = new URL(`${GHL_API_BASE}/users/`);
+  url.searchParams.set("locationId", process.env.GHL_LOCATION_ID);
+  const res = await fetch(url, { headers: headers() });
+  if (!res.ok) throw new Error(`users list failed with status ${res.status}`);
+  const data = await res.json();
+  return (data.users || []).map((u) => ({ id: u.id, name: u.name, email: u.email }));
+}
+
+module.exports = { isConfigured, findCallRecording, getAccountTimezone, listUsers };

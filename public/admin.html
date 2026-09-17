@@ -35,8 +35,11 @@
           <option value="admin">admin</option>
         </select>
       </label>
-      <label>GHL user name <input type="text" name="ghlUserName" placeholder="e.g. Victor Fierro" /></label>
-      <label>GHL user ID <input type="text" name="ghlUserId" placeholder="phoneCall.user.id value" /></label>
+      <label>GHL user
+        <select name="ghlUser" id="ghl-user-select">
+          <option value="">(none)</option>
+        </select>
+      </label>
       <button type="submit">Add user</button>
       <span id="add-user-error" class="login-error" hidden></span>
     </form>

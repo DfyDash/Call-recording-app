@@ -2,6 +2,7 @@ const sessionBar = document.getElementById("session-bar");
 const userRows = document.getElementById("user-rows");
 const addUserForm = document.getElementById("add-user-form");
 const addUserError = document.getElementById("add-user-error");
+const ghlUserSelect = document.getElementById("ghl-user-select");
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -22,6 +23,18 @@ async function loadSession() {
   }
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})</span>
     <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+}
+
+async function loadGhlUsers() {
+  const res = await fetch("/api/admin/ghl-users");
+  const ghlUsers = await res.json();
+  for (const u of ghlUsers) {
+    const option = document.createElement("option");
+    option.value = u.id;
+    option.dataset.name = u.name || u.email || u.id;
+    option.textContent = `${u.name || "(no name)"}${u.email ? ` — ${u.email}` : ""}`;
+    ghlUserSelect.appendChild(option);
+  }
 }
 
 async function loadUsers() {
@@ -58,6 +71,10 @@ addUserForm.addEventListener("submit", async (e) => {
   addUserError.hidden = true;
   const formData = new FormData(addUserForm);
   const payload = Object.fromEntries(formData.entries());
+  delete payload.ghlUser;
+  const selectedOption = ghlUserSelect.selectedOptions[0];
+  payload.ghlUserId = ghlUserSelect.value || null;
+  payload.ghlUserName = ghlUserSelect.value ? selectedOption.dataset.name : null;
   const res = await fetch("/api/admin/users", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -74,4 +91,5 @@ addUserForm.addEventListener("submit", async (e) => {
 });
 
 loadSession();
+loadGhlUsers();
 loadUsers();

@@ -1,6 +1,7 @@
 const express = require("express");
 const { randomUUID } = require("crypto");
 const db = require("../db");
+const ghlApi = require("../ghlApi");
 const { hashPassword, requireAdmin } = require("../auth");
 
 const router = express.Router();
@@ -10,6 +11,19 @@ router.use(requireAdmin);
 router.get("/users", async (req, res) => {
   const users = await db.listUsers();
   res.json(users);
+});
+
+// The real GHL user list, for populating a picker in the admin UI instead
+// of requiring someone to hand-type a phoneCall.user.id value.
+router.get("/ghl-users", async (req, res) => {
+  if (!ghlApi.isConfigured()) return res.json([]);
+  try {
+    const users = await ghlApi.listUsers();
+    res.json(users);
+  } catch (err) {
+    console.error("[admin] failed to fetch GHL users:", err);
+    res.status(502).json({ error: "could not fetch GHL user list" });
+  }
 });
 
 router.post("/users", async (req, res) => {
