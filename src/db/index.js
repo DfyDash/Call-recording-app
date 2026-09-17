@@ -68,6 +68,18 @@ async function markCallFailed(callId) {
   );
 }
 
+// GHL's Messages API reliably includes who handled a call (unlike the
+// webhook payload, which depends on the workflow body being configured
+// right), so it's applied as a correction after the initial insert once
+// the recording lookup returns it.
+async function updateCallHandler(callId, handledById, handledByName) {
+  if (!handledById) return;
+  await pool.query(
+    `UPDATE calls SET handled_by_id = $2, handled_by_name = $3 WHERE id = $1`,
+    [callId, handledById, handledByName || null]
+  );
+}
+
 // ghlUserId, when given, scopes results to contacts/calls that user
 // actually handled -- the enforcement point for "users see only their own
 // calls, admins see everything" (ghlUserId omitted/null means admin/no
@@ -191,6 +203,7 @@ module.exports = {
   insertCall,
   markCallStored,
   markCallFailed,
+  updateCallHandler,
   listContacts,
   listCallsForContact,
   getCall,

@@ -258,6 +258,7 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
         }
         buffer = recording.buffer;
         extension = recording.contentType.includes("wav") ? "wav" : "mp3";
+        await db.updateCallHandler(callRowId, recording.handledById, recording.handledByName);
       }
 
       const taggedBuffer = embedMetadata(buffer, extension, {

@@ -27,7 +27,7 @@ async function findConversationId(contactId) {
   return conversation ? conversation.id : null;
 }
 
-async function findCallMessageId(conversationId, occurredAt) {
+async function findCallMessage(conversationId, occurredAt) {
   const url = `${GHL_API_BASE}/conversations/${conversationId}/messages`;
   const res = await fetch(url, { headers: headers() });
   if (!res.ok) throw new Error(`conversations/messages failed with status ${res.status}`);
@@ -37,7 +37,7 @@ async function findCallMessageId(conversationId, occurredAt) {
   const calls = messages.filter((m) => m.type === CALL_MESSAGE_TYPE);
   if (calls.length === 0) return null;
 
-  if (!occurredAt) return calls[0].id;
+  if (!occurredAt) return calls[0];
 
   let best = null;
   let bestDelta = Infinity;
@@ -48,7 +48,7 @@ async function findCallMessageId(conversationId, occurredAt) {
       best = m;
     }
   }
-  return bestDelta <= MATCH_WINDOW_MS ? best.id : null;
+  return bestDelta <= MATCH_WINDOW_MS ? best : null;
 }
 
 async function fetchRecording(messageId) {
@@ -60,17 +60,35 @@ async function fetchRecording(messageId) {
   return { buffer, contentType };
 }
 
+// Cached for the process lifetime, same reasoning as the timezone cache --
+// resolves a GHL userId to a display name without a lookup on every call.
+let cachedUsersById = null;
+
+async function getUserName(userId) {
+  if (!userId) return null;
+  if (!cachedUsersById) {
+    const users = await listUsers();
+    cachedUsersById = new Map(users.map((u) => [u.id, u.name]));
+  }
+  return cachedUsersById.get(userId) || null;
+}
+
 // Looks up and downloads the recording for a completed call via GHL's API,
 // since the Call Completed webhook trigger doesn't expose a recording URL
-// merge field at all -- confirmed against GHL's own docs.
+// merge field at all -- confirmed against GHL's own docs. Also returns who
+// handled the call (from the message's own userId, which GHL always sets),
+// so callers get accurate access-control data without needing it threaded
+// through the webhook payload at all.
 async function findCallRecording({ contactId, occurredAt }) {
   const conversationId = await findConversationId(contactId);
   if (!conversationId) return null;
 
-  const messageId = await findCallMessageId(conversationId, occurredAt);
-  if (!messageId) return null;
+  const message = await findCallMessage(conversationId, occurredAt);
+  if (!message) return null;
 
-  return fetchRecording(messageId);
+  const recording = await fetchRecording(message.id);
+  const handledByName = await getUserName(message.userId).catch(() => null);
+  return { ...recording, handledById: message.userId || null, handledByName };
 }
 
 // Cached for the process lifetime -- a sub-account's timezone essentially
