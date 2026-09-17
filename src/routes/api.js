@@ -1,6 +1,7 @@
 const express = require("express");
 const db = require("../db");
-const { getPlayback } = require("../storage");
+const { getPlayback, getBuffer } = require("../storage");
+const transcription = require("../transcription");
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ function listFilter(req) {
 
 router.get("/me", (req, res) => {
   const { username, role, ghlUserId } = req.session.user;
-  res.json({ username, role, ghlUserId });
+  res.json({ username, role, ghlUserId, transcriptionEnabled: transcription.isEnabled() });
 });
 
 router.get("/contacts", async (req, res) => {
@@ -75,6 +76,37 @@ router.get("/calls/:id/transcript", async (req, res) => {
   }
 
   res.json({ status: call.transcriptionStatus, transcript: call.transcript });
+});
+
+// On-demand only -- nothing calls this automatically (see src/poller.js and
+// src/backfill.js). Kicks off one call's transcription job; completion is
+// picked up later by src/transcriptionPoller.js like any other job.
+router.post("/calls/:id/transcribe", async (req, res) => {
+  if (!transcription.isEnabled()) {
+    return res.status(400).json({ error: "transcription is not enabled" });
+  }
+
+  const call = await db.getCall(req.params.id);
+  if (!call || !call.storageKey) {
+    return res.status(404).json({ error: "recording not found" });
+  }
+  if (req.session.user.role !== "admin" && call.handledById !== req.session.user.ghlUserId) {
+    return res.status(403).json({ error: "not your call" });
+  }
+  if (call.transcriptionStatus === "pending" || call.transcriptionStatus === "completed") {
+    return res.status(409).json({ error: `transcription already ${call.transcriptionStatus}` });
+  }
+
+  try {
+    const buffer = await getBuffer(call.storageKey);
+    const extension = call.storageKey.split(".").pop();
+    await transcription.startJob(call.id, buffer, extension);
+    await db.markTranscriptionPending(call.id);
+    res.json({ status: "pending" });
+  } catch (err) {
+    console.error(`[api] failed to start transcription for call ${call.id}:`, err);
+    res.status(500).json({ error: "failed to start transcription" });
+  }
 });
 
 module.exports = router;

@@ -101,10 +101,18 @@ as the server boots with those set.
 
 ## Call transcription
 
-Optional (`TRANSCRIPTION_ENABLED=true`), via AWS Transcribe. GHL charges
-$0.039/min for its own call transcription (confirmed directly in the GHL UI);
-AWS Transcribe's cost is ~$0.024/min, so this alone undercuts it, with room
-to price well below GHL's rate and still carry a healthy margin.
+Optional (`TRANSCRIPTION_ENABLED=true`), via AWS Transcribe, **on-demand
+only** — a "Transcribe" button per call in the dashboard, nothing automatic.
+Most calls never get relistened to, so auto-transcribing every single one
+(the live poller's ingestion, and `src/backfill.js`'s history walk) would
+mean paying for a lot of transcripts nobody asked for. Triggering it is a
+deliberate, visible action instead, which also doubles as real cost control
+to point to when selling this.
+
+GHL charges $0.039/min for its own call transcription (confirmed directly
+in the GHL UI); AWS Transcribe's cost is ~$0.024/min, so this alone
+undercuts it, with room to price well below GHL's rate and still carry a
+healthy margin.
 
 Deepgram was the other option on the table (~$0.004/min, roughly 6x
 cheaper still) but was passed over for one reason: **BAA turnaround.** AWS
@@ -115,14 +123,16 @@ be in exactly when a customer is asking about HIPAA compliance. One AWS BAA
 covering everything beat a cheaper per-minute rate riding on a second
 vendor relationship.
 
-Mechanically: AWS Transcribe only accepts audio from S3, never raw bytes,
-so `src/transcription.js` uploads the recording to a transient S3 key
-(independent of `STORAGE_DRIVER` — transcription works even when recordings
-are permanently stored on local disk) and starts an async job. Jobs aren't
-instant, so `src/transcriptionPoller.js` checks outstanding jobs every 30s;
-on completion the transcript text is saved to Postgres (`calls.transcript`)
-and the transient S3 copy + AWS's own job record are deleted. The dashboard
-shows a "View transcript" toggle per call once one's ready.
+Mechanically: clicking "Transcribe" hits `POST /api/calls/:id/transcribe`,
+which pulls the stored recording back out (`storage.getBuffer()`, regardless
+of `STORAGE_DRIVER`) and hands it to `src/transcription.js`. AWS Transcribe
+only accepts audio from S3, never raw bytes, so that module uploads it to a
+transient S3 key and starts an async job. Jobs aren't instant, so
+`src/transcriptionPoller.js` checks outstanding jobs every 30s; on
+completion the transcript text is saved to Postgres (`calls.transcript`)
+and the transient S3 copy + AWS's own job record are deleted. The button
+becomes a "Transcribing…" state, then a "View transcript" toggle once
+ready.
 
 The vendor call is isolated behind `src/transcription.js`'s
 `isEnabled()` / `startJob()` / `checkJob()` interface specifically so
@@ -147,13 +157,14 @@ live poller uses. It's safe to run more than once or alongside the live
 poller — `calls.ghl_call_id` is unique, so anything already captured is
 just skipped.
 
-It deliberately does **not** auto-transcribe what it finds. Storing the raw
+Like everything else, it never triggers transcription — that's on-demand
+only, everywhere (see "Call transcription" above). Storing the raw
 backfilled recordings is essentially free (~1MB/min of audio costs a
 fraction of a cent/month on S3, so backfilling years of history is a
 non-issue), but transcribing all of it would not be — at AWS Transcribe's
-rate, a 10,000-minute backlog is a real ~$240 one-time bill. Historical
-transcription is left as a deliberate, separate opt-in rather than a
-silent side effect of "go save everything before it's deleted."
+rate, a 10,000-minute backlog is a real ~$240 one-time bill, which is
+exactly why that stays a deliberate per-call click, not a side effect of
+"go save everything before it's deleted."
 
 Run this once per sub-account at onboarding, or any time before telling a
 customer it's safe to turn GHL's auto-delete setting on. It can only save

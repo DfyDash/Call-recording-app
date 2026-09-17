@@ -20,6 +20,12 @@ function localGetStream(key) {
   return fs.createReadStream(filePath);
 }
 
+function localGetBuffer(key) {
+  const filePath = path.join(localDir, key);
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath);
+}
+
 // --- S3 driver (for the eventual AWS deployment) ---
 
 let s3Client;
@@ -41,6 +47,14 @@ async function s3Save(key, buffer) {
     })
   );
   return key;
+}
+
+async function s3GetBuffer(key) {
+  const { GetObjectCommand } = require("@aws-sdk/client-s3");
+  const res = await getS3Client().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }));
+  const chunks = [];
+  for await (const chunk of res.Body) chunks.push(chunk);
+  return Buffer.concat(chunks);
 }
 
 async function s3GetPresignedUrl(key, downloadFilename) {
@@ -72,4 +86,13 @@ async function getPlayback(key, downloadFilename) {
   return { stream };
 }
 
-module.exports = { saveRecording, getPlayback, driver };
+// Raw bytes regardless of driver -- for on-demand transcription (AWS
+// Transcribe needs to read the recording again after the fact, unlike
+// playback/download, which can redirect to S3 or stream from disk without
+// ever pulling the whole file into memory here).
+async function getBuffer(key) {
+  if (driver === "s3") return s3GetBuffer(key);
+  return localGetBuffer(key);
+}
+
+module.exports = { saveRecording, getPlayback, getBuffer, driver };

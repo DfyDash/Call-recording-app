@@ -106,6 +106,21 @@ audio {
   font-size: 0.85rem;
 }
 
+.transcribe-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.transcribe-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .transcript-text {
   margin: 6px 0 0;
   font-size: 0.85rem;

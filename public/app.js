@@ -9,10 +9,12 @@ const viewAsSelect = document.getElementById("view-as");
 
 let activeContactId = null;
 let viewAs = "";
+let transcriptionEnabled = false;
 
 async function loadSession() {
   const res = await fetch("/api/me");
   const me = await res.json();
+  transcriptionEnabled = !!me.transcriptionEnabled;
   const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a>` : "";
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink} · <a href="/account.html">Change password</a></span>
     <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
@@ -72,6 +74,7 @@ async function selectContact(contact) {
 }
 
 function transcriptCell(call) {
+  const canTranscribe = transcriptionEnabled && call.hasRecording;
   switch (call.transcriptionStatus) {
     case "completed":
       return `<details class="transcript-details" data-call="${call.id}">
@@ -81,9 +84,12 @@ function transcriptCell(call) {
     case "pending":
       return `<span class="transcript-pending">Transcribing…</span>`;
     case "failed":
-      return `<span class="transcript-failed">Transcription failed</span>`;
+      return `<span class="transcript-failed">Transcription failed</span>` +
+        (canTranscribe ? ` <button class="transcribe-btn" data-call="${call.id}">Retry</button>` : "");
     default:
-      return `<span>-</span>`;
+      return canTranscribe
+        ? `<button class="transcribe-btn" data-call="${call.id}">Transcribe</button>`
+        : `<span>-</span>`;
   }
 }
 
@@ -128,6 +134,23 @@ callRows.addEventListener(
   },
   true
 );
+
+// On-demand transcription: nothing starts until someone clicks this.
+callRows.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".transcribe-btn");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = "Starting…";
+  const res = await fetch(`/api/calls/${btn.dataset.call}/transcribe`, { method: "POST" });
+  if (res.ok) {
+    btn.closest("td").innerHTML = `<span class="transcript-pending">Transcribing…</span>`;
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || "Failed to start transcription");
+    btn.disabled = false;
+    btn.textContent = "Transcribe";
+  }
+});
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({

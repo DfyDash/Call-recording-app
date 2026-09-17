@@ -7,11 +7,9 @@
 // window closes is gone for good, so this needs to run (once, or any time
 // there's a gap) before telling a customer it's safe to flip that switch on.
 //
-// Deliberately does NOT auto-transcribe backfilled calls (see poller.js's
-// autoTranscribe option) -- transcribing years of history automatically
-// could be a real one-time bill (~$0.024/min on AWS Transcribe), not
-// something to trigger silently as a side effect of a safety-net backfill.
-// Run it with node src/backfill.js (or npm run backfill).
+// Transcription is on-demand only, everywhere (see routes/api.js's POST
+// /calls/:id/transcribe) -- this never triggers it either. Run it with
+// node src/backfill.js (or npm run backfill).
 
 require("dotenv").config();
 const db = require("./db");
@@ -72,7 +70,7 @@ async function run() {
           continue;
         }
         try {
-          await processCallMessage(conversation, message, { autoTranscribe: false });
+          await processCallMessage(conversation, message);
           callsSaved += 1;
         } catch (err) {
           callsFailed += 1;
