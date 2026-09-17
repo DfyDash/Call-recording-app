@@ -81,6 +81,8 @@ function normalizePayload(body) {
     "phoneCall.attachments.0",
   ]);
   const occurredAt = pick(body, [
+    "phoneCall.startTime",
+    "phoneCall.endTime",
     "timestamp",
     "date_added",
     "dateAdded",
@@ -92,15 +94,27 @@ function normalizePayload(body) {
     "message.date_added",
   ]);
 
+  const resolvedContactId = contactId ? String(contactId) : null;
+  const resolvedOccurredAt = parseDate(occurredAt);
+
+  // GHL's "Call Completed" trigger has no dedicated call ID merge field.
+  // Derive a stable one from contact + call time instead, so retries of the
+  // same webhook delivery still dedupe (GHL resends the same timestamp).
+  const resolvedCallId = callId
+    ? String(callId)
+    : resolvedContactId
+      ? `${resolvedContactId}-${resolvedOccurredAt ? resolvedOccurredAt.getTime() : Date.now()}`
+      : null;
+
   return {
-    contactId: contactId ? String(contactId) : null,
+    contactId: resolvedContactId,
     name,
     phone,
-    callId: callId ? String(callId) : null,
+    callId: resolvedCallId,
     direction,
     durationSeconds: !isBlank(duration) ? parseInt(duration, 10) : null,
     recordingUrl: !isBlank(recordingUrl) ? recordingUrl : null,
-    occurredAt: parseDate(occurredAt),
+    occurredAt: resolvedOccurredAt,
   };
 }
 
