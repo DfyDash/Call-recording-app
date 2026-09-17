@@ -53,14 +53,36 @@ async function searchConversationsPage({ limit = 100, sort = "asc", startAfterDa
 }
 
 // Every call-type message in a conversation (GHL mixes calls, SMS, emails,
-// etc. into the same message list).
-async function listCallMessages(conversationId) {
-  const url = `${GHL_API_BASE}/conversations/${conversationId}/messages`;
-  const res = await fetch(url, { headers: headers() });
-  if (!res.ok) throw new Error(`conversations/messages failed with status ${res.status}`);
-  const data = await res.json();
-  const messages = (data.messages && data.messages.messages) || [];
-  return messages.filter((m) => m.type === CALL_MESSAGE_TYPE);
+// etc. into the same message list). Paginates back through the whole
+// conversation via lastMessageId -- GHL only returns the most recent ~20
+// messages per page, newest first, and a busy contact's calls easily fall
+// off that first page entirely (confirmed: a call from over a year back
+// was invisible until this was added). `since`, when given, stops paging
+// once a page's oldest message is already older than it -- for the live
+// poller, which only needs messages newer than its checkpoint and would
+// otherwise re-walk a contact's entire history every cycle; backfill.js
+// omits it because it wants the full history regardless.
+async function listCallMessages(conversationId, { since } = {}) {
+  const results = [];
+  let lastMessageId;
+  for (;;) {
+    const url = new URL(`${GHL_API_BASE}/conversations/${conversationId}/messages`);
+    if (lastMessageId) url.searchParams.set("lastMessageId", lastMessageId);
+    const res = await fetch(url, { headers: headers() });
+    if (!res.ok) throw new Error(`conversations/messages failed with status ${res.status}`);
+    const data = await res.json();
+    const page = (data.messages && data.messages.messages) || [];
+    if (page.length === 0) break;
+
+    results.push(...page.filter((m) => m.type === CALL_MESSAGE_TYPE));
+
+    const oldestInPage = new Date(page[page.length - 1].dateAdded);
+    if (!(data.messages && data.messages.nextPage)) break;
+    if (since && oldestInPage <= since) break;
+
+    lastMessageId = page[page.length - 1].id;
+  }
+  return results;
 }
 
 async function downloadRecording(messageId) {

@@ -113,7 +113,7 @@ async function retryFailedRecordings(maxAgeMs = FAILED_RECORDING_RETRY_WINDOW_MS
 
     let messages;
     try {
-      messages = await ghlApi.listCallMessages(conversationId);
+      messages = await ghlApi.listCallMessages(conversationId, { since: call.occurredAt });
     } catch (err) {
       console.error(`[poller] retry: failed to list messages for call ${call.ghlCallId}:`, err);
       continue;
@@ -167,7 +167,7 @@ async function pollOnce() {
 
   const newMessages = [];
   for (const conversation of candidates) {
-    const messages = await ghlApi.listCallMessages(conversation.id);
+    const messages = await ghlApi.listCallMessages(conversation.id, { since: checkpoint });
     for (const message of messages) {
       if (new Date(message.dateAdded) > checkpoint) {
         newMessages.push({ conversation, message });
