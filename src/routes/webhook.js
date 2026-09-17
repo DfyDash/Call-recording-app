@@ -5,12 +5,25 @@ const { saveRecording } = require("../storage");
 
 const router = express.Router();
 
+// GHL renders an unresolved merge tag as the literal text "null" (or
+// "undefined") rather than omitting the key, so those must be treated the
+// same as a genuinely missing value.
+function isBlank(value) {
+  return value === undefined || value === null || value === "" || value === "null" || value === "undefined";
+}
+
 function pick(obj, paths) {
   for (const p of paths) {
     const value = p.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
-    if (value !== undefined && value !== null && value !== "") return value;
+    if (!isBlank(value)) return value;
   }
   return null;
+}
+
+function parseDate(value) {
+  if (isBlank(value)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 // GHL's exact field names vary by trigger/version, so we check several
@@ -50,9 +63,9 @@ function normalizePayload(body) {
     phone,
     callId: callId ? String(callId) : null,
     direction,
-    durationSeconds: duration != null ? parseInt(duration, 10) : null,
-    recordingUrl,
-    occurredAt: occurredAt ? new Date(occurredAt) : null,
+    durationSeconds: !isBlank(duration) ? parseInt(duration, 10) : null,
+    recordingUrl: !isBlank(recordingUrl) ? recordingUrl : null,
+    occurredAt: parseDate(occurredAt),
   };
 }
 
@@ -72,55 +85,61 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
     return res.status(401).json({ error: "invalid or missing token" });
   }
 
-  const parsed = normalizePayload(req.body);
   console.log("[webhook] received payload:", JSON.stringify(req.body));
 
-  if (!parsed.contactId || !parsed.callId) {
-    console.warn("[webhook] missing contactId/callId, check field names against raw payload above");
-    return res.status(400).json({
-      error: "could not find contactId/callId in payload; see server logs for the raw payload",
-    });
-  }
-
-  await db.upsertContact({
-    contactId: parsed.contactId,
-    name: parsed.name,
-    phone: parsed.phone,
-  });
-
-  const callRowId = randomUUID();
-  const inserted = await db.insertCall({
-    id: callRowId,
-    ghlCallId: parsed.callId,
-    contactId: parsed.contactId,
-    direction: parsed.direction,
-    durationSeconds: parsed.durationSeconds,
-    occurredAt: parsed.occurredAt,
-    sourceRecordingUrl: parsed.recordingUrl,
-    rawPayload: req.body,
-  });
-
-  if (!inserted) {
-    return res.status(200).json({ status: "duplicate", ghlCallId: parsed.callId });
-  }
-
-  if (!parsed.recordingUrl) {
-    console.warn(`[webhook] no recording URL for call ${parsed.callId}, metadata stored without audio`);
-    return res.status(200).json({ status: "stored_without_recording", callId: callRowId });
-  }
-
   try {
-    const response = await fetch(parsed.recordingUrl);
-    if (!response.ok) throw new Error(`fetch failed with status ${response.status}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const key = `${parsed.contactId}/${callRowId}.${extensionFromUrl(parsed.recordingUrl)}`;
-    await saveRecording(key, buffer);
-    await db.markCallStored(callRowId, key);
-    return res.status(200).json({ status: "ok", callId: callRowId });
+    const parsed = normalizePayload(req.body);
+
+    if (!parsed.contactId || !parsed.callId) {
+      console.warn("[webhook] missing contactId/callId, check field names against raw payload above");
+      return res.status(400).json({
+        error: "could not find contactId/callId in payload; see server logs for the raw payload",
+      });
+    }
+
+    await db.upsertContact({
+      contactId: parsed.contactId,
+      name: parsed.name,
+      phone: parsed.phone,
+    });
+
+    const callRowId = randomUUID();
+    const inserted = await db.insertCall({
+      id: callRowId,
+      ghlCallId: parsed.callId,
+      contactId: parsed.contactId,
+      direction: parsed.direction,
+      durationSeconds: parsed.durationSeconds,
+      occurredAt: parsed.occurredAt,
+      sourceRecordingUrl: parsed.recordingUrl,
+      rawPayload: req.body,
+    });
+
+    if (!inserted) {
+      return res.status(200).json({ status: "duplicate", ghlCallId: parsed.callId });
+    }
+
+    if (!parsed.recordingUrl) {
+      console.warn(`[webhook] no recording URL for call ${parsed.callId}, metadata stored without audio`);
+      return res.status(200).json({ status: "stored_without_recording", callId: callRowId });
+    }
+
+    try {
+      const response = await fetch(parsed.recordingUrl);
+      if (!response.ok) throw new Error(`fetch failed with status ${response.status}`);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const key = `${parsed.contactId}/${callRowId}.${extensionFromUrl(parsed.recordingUrl)}`;
+      await saveRecording(key, buffer);
+      await db.markCallStored(callRowId, key);
+      return res.status(200).json({ status: "ok", callId: callRowId });
+    } catch (err) {
+      console.error(`[webhook] failed to fetch/store recording for call ${parsed.callId}:`, err);
+      await db.markCallFailed(callRowId);
+      return res.status(202).json({ status: "metadata_saved_recording_fetch_failed", callId: callRowId });
+    }
   } catch (err) {
-    console.error(`[webhook] failed to fetch/store recording for call ${parsed.callId}:`, err);
-    await db.markCallFailed(callRowId);
-    return res.status(202).json({ status: "metadata_saved_recording_fetch_failed", callId: callRowId });
+    console.error("[webhook] unexpected error handling payload:", err);
+    return res.status(500).json({ error: "internal error processing webhook, see server logs" });
   }
 });
 
