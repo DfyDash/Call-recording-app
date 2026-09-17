@@ -1,4 +1,4 @@
-# Call Recording Vault (Prototype)
+# CallTrove (Prototype)
 
 Solves a specific, confirmed problem: GHL's downloaded call recordings carry
 no embedded metadata (no timestamp, no caller info, just a GUID filename).
