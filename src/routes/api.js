@@ -2,6 +2,7 @@ const express = require("express");
 const db = require("../db");
 const { getPlayback, getBuffer } = require("../storage");
 const transcription = require("../transcription");
+const { requireCsrf } = require("../auth");
 
 const router = express.Router();
 
@@ -36,7 +37,13 @@ function logAccess(req, { action, callId, success, denialReason }) {
 
 router.get("/me", (req, res) => {
   const { username, role, ghlUserId } = req.session.user;
-  res.json({ username, role, ghlUserId, transcriptionEnabled: transcription.isEnabled() });
+  res.json({
+    username,
+    role,
+    ghlUserId,
+    transcriptionEnabled: transcription.isEnabled(),
+    csrfToken: req.session.csrfToken,
+  });
 });
 
 router.get("/contacts", async (req, res) => {
@@ -124,7 +131,7 @@ router.get("/calls/:id/transcript", async (req, res) => {
 // On-demand only -- nothing calls this automatically (see src/poller.js and
 // src/backfill.js). Kicks off one call's transcription job; completion is
 // picked up later by src/transcriptionPoller.js like any other job.
-router.post("/calls/:id/transcribe", async (req, res) => {
+router.post("/calls/:id/transcribe", requireCsrf, async (req, res) => {
   if (!transcription.isEnabled()) {
     return res.status(400).json({ error: "transcription is not enabled" });
   }

@@ -35,4 +35,17 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { hashPassword, verifyPassword, sessionUser, requireAuth, requireAdmin };
+// Session-bound CSRF token, issued on login (routes/auth.js) and handed to
+// the client via GET /api/me. For the JSON/fetch-based API routes here --
+// the two classic HTML-form POSTs (logout, change-password) check a hidden
+// form field directly in routes/auth.js instead, since they aren't fetch
+// calls and can't set a custom header.
+function requireCsrf(req, res, next) {
+  const token = req.get("X-CSRF-Token");
+  if (!req.session || !req.session.csrfToken || token !== req.session.csrfToken) {
+    return res.status(403).json({ error: "invalid or missing CSRF token" });
+  }
+  next();
+}
+
+module.exports = { hashPassword, verifyPassword, sessionUser, requireAuth, requireAdmin, requireCsrf };

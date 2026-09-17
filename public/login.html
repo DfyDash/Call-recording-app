@@ -23,10 +23,6 @@
       <p class="forgot-password">Forgot your password? Ask your admin to reset it from Manage Users.</p>
     </form>
   </div>
-  <script>
-    if (new URLSearchParams(location.search).get("error")) {
-      document.getElementById("login-error").hidden = false;
-    }
-  </script>
+  <script src="login.js"></script>
 </body>
 </html>

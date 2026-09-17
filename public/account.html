@@ -16,6 +16,7 @@
     <div id="error-message" class="login-error" hidden></div>
 
     <form method="POST" action="/auth/change-password" class="login-card">
+      <input type="hidden" name="csrfToken" id="csrf-token-input" />
       <label>
         Current password
         <input type="password" name="currentPassword" autocomplete="current-password" required />

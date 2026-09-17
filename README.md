@@ -242,6 +242,38 @@ reads, transcription requests (`src/routes/api.js`) — not every list-view
 fetch, which is metadata browsing (call duration, direction, who handled
 it), not PHI access, and would otherwise flood the log on every page load.
 
+## Security hardening
+
+Beyond auth/RBAC/audit logging (covered above):
+
+- **`helmet`** — CSP restricted to `'self'` (everything's self-hosted, no
+  CDNs anywhere in the app, so no `unsafe-inline`/allowlist needed),
+  HSTS, and the rest of helmet's default header set.
+  `crossOriginEmbedderPolicy` is explicitly off: recording playback
+  redirects to a presigned S3 URL when `STORAGE_DRIVER=s3` (a different
+  origin), and COEP's default would block that `<audio>` load since S3
+  doesn't send back a matching `Cross-Origin-Resource-Policy` header.
+- **Login rate-limiting** — `express-rate-limit` on `POST /auth/login`
+  specifically (20 attempts/15min per IP), not the whole app.
+- **CSRF protection** — a session-bound token issued on login, handed to
+  the client via `GET /api/me`. Checked as an `X-CSRF-Token` header on
+  the JSON API's mutating routes (`src/auth.js`'s `requireCsrf`), and as
+  a hidden form field on the two classic HTML-form POSTs that can't set a
+  custom header (`/auth/logout`, `/auth/change-password`).
+- **SSH closed** — the EC2 security group no longer allows port 22 from
+  anywhere; all deploys go through SSM, which never needed it open.
+- **RDS automated backups** — turned on (7-day retention); was 0 before,
+  meaning zero recovery path from a bad migration or bug.
+
+Deliberately not done yet, and why: **RDS encryption-at-rest** requires
+snapshotting the database, copying the snapshot with a KMS key, and
+restoring into a new instance — a real maintenance window, not a live
+toggle — so it's scheduled for before any customer with real PHI, not
+before then. **Multi-AZ** would roughly double the RDS bill for a
+failure mode (an AWS data-center outage) that doesn't matter much for a
+single-account prototype yet; worth turning on once real customers depend
+on uptime.
+
 ## Historical backfill
 
 GHL lets sub-accounts turn on auto-deleting call recordings after N days

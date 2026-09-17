@@ -15,6 +15,7 @@ const nextPageBtn = document.getElementById("next-page-btn");
 
 let viewAs = "";
 let transcriptionEnabled = false;
+let csrfToken = "";
 
 // Default view: this week, all contacts -- never an empty screen on load,
 // never pulling too much data unasked either.
@@ -68,9 +69,10 @@ async function loadSession() {
   const res = await fetch("/api/me");
   const me = await res.json();
   transcriptionEnabled = !!me.transcriptionEnabled;
+  csrfToken = me.csrfToken || "";
   const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a>` : "";
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink} · <a href="/account.html">Change password</a></span>
-    <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+    <form method="POST" action="/auth/logout"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Log out</button></form>`;
 
   if (me.role === "admin") await loadViewAsOptions();
 }
@@ -235,7 +237,10 @@ callRows.addEventListener("click", async (e) => {
   if (!btn) return;
   btn.disabled = true;
   btn.textContent = "Starting…";
-  const res = await fetch(`/api/calls/${btn.dataset.call}/transcribe`, { method: "POST" });
+  const res = await fetch(`/api/calls/${btn.dataset.call}/transcribe`, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
   if (res.ok) {
     btn.closest("td").innerHTML = `<span class="transcript-pending">Transcribing…</span>`;
   } else {

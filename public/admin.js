@@ -10,6 +10,7 @@ const auditPrevBtn = document.getElementById("audit-prev-btn");
 const auditNextBtn = document.getElementById("audit-next-btn");
 const auditPageIndicator = document.getElementById("audit-page-indicator");
 let auditPage = 1;
+let csrfToken = "";
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -28,8 +29,9 @@ async function loadSession() {
     location.href = "/";
     return;
   }
+  csrfToken = me.csrfToken || "";
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)}) · <a href="/account.html">Change password</a></span>
-    <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+    <form method="POST" action="/auth/logout"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Log out</button></form>`;
 
   if (me.transcriptionEnabled) await loadSettings();
 }
@@ -45,7 +47,7 @@ autoTranscribeToggle.addEventListener("change", async () => {
   autoTranscribeToggle.disabled = true;
   const res = await fetch("/api/admin/settings", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
     body: JSON.stringify({ autoTranscribeEnabled: autoTranscribeToggle.checked }),
   });
   if (!res.ok) {
@@ -100,7 +102,7 @@ async function resetPassword(id, username) {
   const newPassword = generatePassword();
   const res = await fetch(`/api/admin/users/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
     body: JSON.stringify({ password: newPassword }),
   });
   if (!res.ok) {
@@ -114,7 +116,10 @@ async function resetPassword(id, username) {
 
 async function deleteUser(id, username) {
   if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
-  const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+  const res = await fetch(`/api/admin/users/${id}`, {
+    method: "DELETE",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     alert(body.error || "could not delete user");
@@ -171,7 +176,7 @@ addUserForm.addEventListener("submit", async (e) => {
   payload.ghlUserName = ghlUserSelect.value ? selectedOption.dataset.name : null;
   const res = await fetch("/api/admin/users", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {

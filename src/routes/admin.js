@@ -2,7 +2,7 @@ const express = require("express");
 const { randomUUID } = require("crypto");
 const db = require("../db");
 const ghlApi = require("../ghlApi");
-const { hashPassword, requireAdmin } = require("../auth");
+const { hashPassword, requireAdmin, requireCsrf } = require("../auth");
 
 const router = express.Router();
 
@@ -30,7 +30,7 @@ router.get("/ghl-users", async (req, res) => {
   }
 });
 
-router.post("/users", async (req, res) => {
+router.post("/users", requireCsrf, async (req, res) => {
   const { username, password, role, ghlUserId, ghlUserName } = req.body || {};
   if (!username || !password || !["admin", "user"].includes(role)) {
     return res.status(400).json({ error: "username, password, and a valid role are required" });
@@ -52,7 +52,7 @@ router.post("/users", async (req, res) => {
   res.status(201).json({ status: "created" });
 });
 
-router.put("/users/:id", async (req, res) => {
+router.put("/users/:id", requireCsrf, async (req, res) => {
   const { role, ghlUserId, ghlUserName, password } = req.body || {};
   if (role !== undefined && !["admin", "user"].includes(role)) {
     return res.status(400).json({ error: "invalid role" });
@@ -76,7 +76,7 @@ router.put("/users/:id", async (req, res) => {
   res.json({ status: "updated" });
 });
 
-router.delete("/users/:id", async (req, res) => {
+router.delete("/users/:id", requireCsrf, async (req, res) => {
   if (req.params.id === req.session.user.id) {
     return res.status(400).json({ error: "cannot delete your own account while logged in as it" });
   }
@@ -92,7 +92,7 @@ router.get("/settings", async (req, res) => {
   res.json({ autoTranscribeEnabled: await db.getAutoTranscribeEnabled() });
 });
 
-router.put("/settings", async (req, res) => {
+router.put("/settings", requireCsrf, async (req, res) => {
   const enabled = Boolean((req.body || {}).autoTranscribeEnabled);
   await db.setAutoTranscribeEnabled(enabled);
   await log(req, "auto_transcribe_toggled", `Turned automatic transcription ${enabled ? "ON" : "OFF"}`);

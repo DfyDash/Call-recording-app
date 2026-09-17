@@ -22,8 +22,9 @@ async function loadSession() {
     location.href = "/";
     return;
   }
+  const csrfToken = me.csrfToken || "";
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)}) · <a href="/account.html">Change password</a></span>
-    <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+    <form method="POST" action="/auth/logout"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Log out</button></form>`;
 }
 
 const ACTION_LABELS = {
