@@ -4,8 +4,17 @@ const emptyState = document.getElementById("empty-state");
 const callHistory = document.getElementById("call-history");
 const contactHeading = document.getElementById("contact-heading");
 const callRows = document.getElementById("call-rows");
+const sessionBar = document.getElementById("session-bar");
 
 let activeContactId = null;
+
+async function loadSession() {
+  const res = await fetch("/api/me");
+  const me = await res.json();
+  const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a>` : "";
+  sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink}</span>
+    <form method="POST" action="/auth/logout"><button type="submit">Log out</button></form>`;
+}
 
 async function loadContacts(search) {
   const url = search ? `/api/contacts?search=${encodeURIComponent(search)}` : "/api/contacts";
@@ -53,6 +62,7 @@ function renderCalls(calls) {
       <td>${when}</td>
       <td>${escapeHtml(call.direction || "-")}</td>
       <td>${duration}</td>
+      <td>${escapeHtml(call.handledByName || "-")}</td>
       <td>${escapeHtml(call.recordingStatus)}</td>
       <td>${recordingCell}</td>
     `;
@@ -76,4 +86,5 @@ searchInput.addEventListener("input", () => {
   searchTimer = setTimeout(() => loadContacts(searchInput.value.trim()), 200);
 });
 
+loadSession();
 loadContacts();

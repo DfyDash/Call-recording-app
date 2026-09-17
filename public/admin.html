@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manage Users — Call Recording Vault</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="admin-page">
+    <div id="session-bar" class="session-bar"></div>
+    <h1>Manage users</h1>
+    <p><a href="/">&larr; Back to dashboard</a></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Role</th>
+          <th>GHL user name</th>
+          <th>GHL user ID</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="user-rows"></tbody>
+    </table>
+
+    <h2>Add user</h2>
+    <form id="add-user-form" class="admin-form">
+      <label>Username <input type="text" name="username" required /></label>
+      <label>Password <input type="password" name="password" required /></label>
+      <label>Role
+        <select name="role">
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
+      </label>
+      <label>GHL user name <input type="text" name="ghlUserName" placeholder="e.g. Victor Fierro" /></label>
+      <label>GHL user ID <input type="text" name="ghlUserId" placeholder="phoneCall.user.id value" /></label>
+      <button type="submit">Add user</button>
+      <span id="add-user-error" class="login-error" hidden></span>
+    </form>
+  </div>
+  <script src="admin.js"></script>
+</body>
+</html>

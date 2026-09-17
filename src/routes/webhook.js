@@ -145,6 +145,11 @@ function normalizePayload(body, timezone) {
     "call_date",
     "callDate",
   ]);
+  // Which GHL user (agent) handled this call -- used for per-user access
+  // control (admins see everything, users see only calls with a matching
+  // handled_by_id). The recommended webhook body names these user_id/user_name.
+  const handledById = pick(body, ["user_id", "userId", "handled_by_id"]);
+  const handledByName = pick(body, ["user_name", "userName", "handled_by_name"]);
 
   const resolvedContactId = contactId ? String(contactId) : null;
   const resolvedOccurredAt = parseDate(occurredAt, timezone);
@@ -167,6 +172,8 @@ function normalizePayload(body, timezone) {
     durationSeconds: !isBlank(duration) ? parseInt(duration, 10) : null,
     recordingUrl: !isBlank(recordingUrl) ? recordingUrl : null,
     occurredAt: resolvedOccurredAt,
+    handledById: !isBlank(handledById) ? String(handledById) : null,
+    handledByName: !isBlank(handledByName) ? handledByName : null,
   };
 }
 
@@ -215,6 +222,8 @@ router.post("/ghl/call-completed", express.json({ limit: "2mb" }), async (req, r
       occurredAt: parsed.occurredAt,
       sourceRecordingUrl: parsed.recordingUrl,
       rawPayload: req.body,
+      handledById: parsed.handledById,
+      handledByName: parsed.handledByName,
     });
 
     if (!inserted) {

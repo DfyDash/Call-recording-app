@@ -20,7 +20,30 @@ CREATE TABLE IF NOT EXISTS calls (
   storage_key           TEXT,
   recording_status      TEXT NOT NULL DEFAULT 'pending',
   raw_payload           JSONB,
+  handled_by_id         TEXT,
+  handled_by_name       TEXT,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ADD COLUMN IF NOT EXISTS so re-running this migration against a database
+-- that already had the old calls/contacts tables (before handled_by_* or
+-- the users table existed) still brings it up to date, not just fresh ones.
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS handled_by_id TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS handled_by_name TEXT;
+
 CREATE INDEX IF NOT EXISTS calls_contact_idx ON calls (ghl_contact_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS calls_handled_by_idx ON calls (handled_by_id);
+
+-- Dashboard login accounts. Not linked to GHL's own user system (no OAuth
+-- in this phase) -- an admin creates accounts here and maps each one to the
+-- GHL user identity (handled_by_id) that appears on their calls.
+CREATE TABLE IF NOT EXISTS users (
+  id             UUID PRIMARY KEY,
+  username       TEXT UNIQUE NOT NULL,
+  password_hash  TEXT NOT NULL,
+  password_salt  TEXT NOT NULL,
+  role           TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  ghl_user_id    TEXT,
+  ghl_user_name  TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
