@@ -16,8 +16,8 @@ const nextPageBtn = document.getElementById("next-page-btn");
 let viewAs = "";
 let transcriptionEnabled = false;
 
-// Default view: this month, all contacts -- never an empty screen on load,
-// never pulling a year of data unasked either.
+// Default view: this week, all contacts -- never an empty screen on load,
+// never pulling too much data unasked either.
 const state = {
   contactId: null,
   contactLabel: "All contacts",
@@ -292,8 +292,8 @@ nextPageBtn.addEventListener("click", () => {
   loadCalls();
 });
 
-// Initial view: this month, all contacts.
-const initialRange = presetRange("month");
+// Initial view: this week, all contacts.
+const initialRange = presetRange("week");
 state.dateFrom = initialRange.from;
 state.dateTo = initialRange.to;
 dateFromInput.value = state.dateFrom;

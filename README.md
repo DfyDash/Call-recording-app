@@ -68,9 +68,9 @@ configured exactly right.
 The dashboard's main view is a single call search, not a fixed "pick a
 contact first" flow: an optional contact filter (name/phone search in the
 sidebar still works, for telling apart two contacts with the same name),
-an optional date range, and pagination. Loads to **this month, all
-contacts** by default so it's never empty on first load and never pulls a
-year of data unasked.
+an optional date range, and pagination. Loads to **this week, all
+contacts** by default so it's never empty on first load and never pulls
+too much data unasked.
 
 Date range: preset buttons (Today / This week / This month / This year)
 that just fill in a From/To date pair, which can also be edited directly
