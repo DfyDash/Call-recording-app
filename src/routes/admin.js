@@ -1,7 +1,9 @@
 const express = require("express");
 const { randomUUID } = require("crypto");
+const archiver = require("archiver");
 const db = require("../db");
 const ghlApi = require("../ghlApi");
+const { getBuffer } = require("../storage");
 const { hashPassword, requireAdmin, requireCsrf } = require("../auth");
 const { loginLimiter, limiterKey } = require("./auth");
 
@@ -118,6 +120,62 @@ router.get("/audit-log", async (req, res) => {
 router.get("/phi-access-log", async (req, res) => {
   const result = await db.listPhiAccessLog({ page: req.query.page, pageSize: req.query.pageSize });
   res.json(result);
+});
+
+// Bulk export -- everyone's recordings (optionally date-filtered) as one
+// streamed ZIP, not one-by-one. The main use case is getting a full copy
+// of everything before an account is canceled and its storage purged (see
+// the account-cancellation flow), but it's useful any time an admin wants
+// an offline copy. Streams straight to the response as each file is read
+// (archiver + one getBuffer() at a time) rather than buffering the whole
+// export in memory or on disk first.
+router.get("/download-all", async (req, res) => {
+  const { dateFrom, dateTo } = req.query;
+  const calls = await db.listAllCallsWithRecordings({ dateFrom, dateTo });
+
+  await log(
+    req,
+    "bulk_export",
+    `Started bulk export of ${calls.length} call recording${calls.length === 1 ? "" : "s"}` +
+      (dateFrom || dateTo ? ` (${dateFrom || "…"} to ${dateTo || "…"})` : "")
+  );
+
+  const zipName = `calltrove-export-${new Date().toISOString().slice(0, 10)}.zip`;
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+
+  // Low compression, not zero: WAV (uncompressed PCM) still shrinks
+  // meaningfully, but burning CPU trying to compress already-compressed
+  // MP3s further isn't worth it on a small instance during a big export.
+  const archive = archiver("zip", { zlib: { level: 1 } });
+  archive.on("error", (err) => {
+    console.error("[admin] zip export failed:", err);
+    res.destroy(err);
+  });
+  archive.pipe(res);
+
+  for (const call of calls) {
+    let buffer;
+    try {
+      buffer = await getBuffer(call.storageKey);
+    } catch (err) {
+      console.error(`[admin] skipping call ${call.id} in export, couldn't read recording:`, err);
+      continue;
+    }
+    if (!buffer) continue;
+
+    // call.id.slice(0, 8) makes the filename unique on its own (a UUID
+    // collision in the first 8 hex chars is astronomically unlikely), no
+    // separate collision-tracking needed.
+    const ext = call.storageKey.split(".").pop();
+    const who = (call.contactName || call.contactPhone || "unknown").replace(/[^a-zA-Z0-9]+/g, "_");
+    const date = call.occurredAt ? new Date(call.occurredAt).toISOString().slice(0, 10) : "unknown-date";
+    const name = `${who}/${date}_${call.direction || "call"}_${call.id.slice(0, 8)}.${ext}`;
+
+    archive.append(buffer, { name });
+  }
+
+  await archive.finalize();
 });
 
 module.exports = router;

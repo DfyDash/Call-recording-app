@@ -188,6 +188,32 @@ async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, page = 1, pag
   return { calls: rows, total, page: pageNum, pageSize: size };
 }
 
+// Unpaginated, unlike listCalls() -- for the bulk ZIP export
+// (routes/admin.js), which needs every matching row to stream, not one
+// page. dateFrom/dateTo are optional, same semantics as listCalls().
+async function listAllCallsWithRecordings({ dateFrom, dateTo } = {}) {
+  const conditions = ["c.storage_key IS NOT NULL"];
+  const params = [];
+  if (dateFrom) {
+    params.push(dateFrom);
+    conditions.push(`c.occurred_at >= $${params.length}::date`);
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    conditions.push(`c.occurred_at < ($${params.length}::date + interval '1 day')`);
+  }
+  const { rows } = await pool.query(
+    `SELECT c.id, c.storage_key AS "storageKey", c.occurred_at AS "occurredAt",
+            c.direction, ct.name AS "contactName", ct.phone AS "contactPhone"
+     FROM calls c
+     LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY c.occurred_at ASC NULLS LAST`,
+    params
+  );
+  return rows;
+}
+
 async function getCall(callId) {
   const { rows } = await pool.query(
     `SELECT c.id, c.storage_key AS "storageKey", c.recording_status AS "recordingStatus",
@@ -364,6 +390,7 @@ module.exports = {
   updateCallHandler,
   listContacts,
   listCalls,
+  listAllCallsWithRecordings,
   getCall,
   createUser,
   getUserByUsername,

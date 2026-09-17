@@ -293,6 +293,24 @@ failure mode (an AWS data-center outage) that doesn't matter much for a
 single-account prototype yet; worth turning on once real customers depend
 on uptime.
 
+## Bulk export
+
+**Manage users → Export** downloads every stored recording as one ZIP
+(`GET /api/admin/download-all`, optional `dateFrom`/`dateTo`), organized
+by contact. Streams straight to the response via `archiver` as each file
+is read (one `storage.getBuffer()` at a time) rather than buffering the
+whole export in memory or on disk first, so it scales to a lot of history
+without a memory spike. Logged in the admin activity log with a count of
+what was included.
+
+Nginx's default `proxy_read_timeout` (60s) was too short for a large
+export, so it's bumped to 600s in `/etc/nginx/conf.d/*.conf` -- a
+config-level change, not something `src/` controls.
+
+Main use case: getting a full copy of everything before an account is
+canceled and its storage purged (see the account-cancellation flow,
+still being built) -- but useful any time as an offline copy.
+
 ## Historical backfill
 
 GHL lets sub-accounts turn on auto-deleting call recordings after N days
