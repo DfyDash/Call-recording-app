@@ -105,13 +105,24 @@ async function loadContacts(search) {
   renderContacts(contacts);
 }
 
+// GHL sometimes stores the contact's own phone number in the "name" field
+// when no real name was ever entered -- showing both then just repeats the
+// same number twice, so treat that case the same as no name at all.
+function isNameJustThePhone(name, phone) {
+  if (!name || !phone) return false;
+  const nameDigits = name.replace(/\D/g, "");
+  const phoneDigits = phone.replace(/\D/g, "");
+  return !!nameDigits && nameDigits.slice(-10) === phoneDigits.slice(-10);
+}
+
 function renderContacts(contacts) {
   contactList.innerHTML = "";
   for (const contact of contacts) {
     const li = document.createElement("li");
     li.className = contact.id === state.contactId ? "active" : "";
     li.dataset.contactId = contact.id;
-    li.innerHTML = `${escapeHtml(contact.name || "(no name)")}<span class="contact-phone">${escapeHtml(contact.phone || "")}</span>`;
+    const displayName = isNameJustThePhone(contact.name, contact.phone) ? "(no name)" : contact.name || "(no name)";
+    li.innerHTML = `${escapeHtml(displayName)}<span class="contact-phone">${escapeHtml(contact.phone || "")}</span>`;
     li.addEventListener("click", () => selectContact(contact));
     contactList.appendChild(li);
   }
