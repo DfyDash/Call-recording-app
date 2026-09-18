@@ -265,15 +265,19 @@ function showChartTooltip(e, m, missing, i, bandW, storedH) {
   chartTooltip.textContent = "";
   const monthLine = document.createElement("div");
   monthLine.textContent = monthLabel(m.month);
-  const valueLine = document.createElement("div");
-  const storedSpan = document.createElement("span");
-  storedSpan.className = "tooltip-value";
-  storedSpan.textContent = String(m.stored);
-  const missingSpan = document.createElement("span");
-  missingSpan.className = "tooltip-value";
-  missingSpan.textContent = String(missing);
-  valueLine.append(storedSpan, " stored · ", missingSpan, " no recording found");
-  chartTooltip.append(monthLine, valueLine);
+
+  function tooltipRow(label, value) {
+    const row = document.createElement("div");
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "tooltip-value";
+    valueSpan.textContent = String(value);
+    row.append(`${label}: `, valueSpan);
+    return row;
+  }
+
+  const storedLine = tooltipRow("Stored", m.stored);
+  const missingLine = tooltipRow("No recording found", missing);
+  chartTooltip.append(monthLine, storedLine, missingLine);
 }
 
 function hideChartTooltip() {
