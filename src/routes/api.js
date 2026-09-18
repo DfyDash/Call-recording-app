@@ -55,12 +55,13 @@ router.get("/contacts", async (req, res) => {
 // contacts"), dateFrom/dateTo are optional 'YYYY-MM-DD' strings, page/
 // pageSize drive pagination (20/50/100, validated in db.listCalls).
 router.get("/calls", async (req, res) => {
-  const { contactId, dateFrom, dateTo, page, pageSize } = req.query;
+  const { contactId, dateFrom, dateTo, disposition, page, pageSize } = req.query;
   const result = await db.listCalls({
     contactId: contactId || undefined,
     ghlUserId: listFilter(req),
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    disposition: disposition || undefined,
     page,
     pageSize,
   });

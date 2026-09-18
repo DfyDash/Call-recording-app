@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="admin-page">
+  <div class="admin-page coverage-page">
     <div id="session-bar" class="session-bar"></div>
     <h1>Call recording coverage</h1>
     <p><a href="/">&larr; Back to dashboard</a> · <a href="/admin.html">Manage users</a> · <a href="/phi-access-log.html">Access log</a></p>
@@ -19,6 +19,23 @@
     </p>
 
     <div class="stat-grid" id="stat-grid"></div>
+
+    <div class="chart-card viz-root" data-palette="#0ca30c,#d03b3b">
+      <h2>Completed calls, by month</h2>
+      <p class="settings-note">
+        Stored recordings vs. completed calls with none -- a sustained stretch
+        of red rather than scattered misses usually means something broke on
+        GHL's side, not individual missed captures.
+      </p>
+      <div class="chart-wrap">
+        <svg id="month-chart" class="month-chart" role="img" aria-label="Completed calls per month, stored vs missing a recording"></svg>
+        <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+      </div>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--status-good)"></span>Stored</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--status-critical)"></span>Missing</span>
+      </div>
+    </div>
 
     <h2>By outcome</h2>
     <table>

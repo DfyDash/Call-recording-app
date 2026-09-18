@@ -184,8 +184,12 @@ router.post("/backfill", requireCsrf, async (req, res) => {
 // plus the list of genuine gaps (completed calls with no recording -- as
 // opposed to no-answer/busy/voicemail, which were never going to have one).
 router.get("/coverage", async (req, res) => {
-  const [summary, byDisposition] = await Promise.all([db.getCoverageSummary(), db.getCoverageByDisposition()]);
-  res.json({ summary, byDisposition });
+  const [summary, byDisposition, byMonth] = await Promise.all([
+    db.getCoverageSummary(),
+    db.getCoverageByDisposition(),
+    db.getCoverageByMonth(),
+  ]);
+  res.json({ summary, byDisposition, byMonth });
 });
 
 router.get("/coverage/gaps", async (req, res) => {

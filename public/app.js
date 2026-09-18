@@ -22,6 +22,7 @@ let csrfToken = "";
 const state = {
   contactId: null,
   contactLabel: "All contacts",
+  disposition: null,
   dateFrom: "",
   dateTo: "",
   page: 1,
@@ -142,6 +143,7 @@ function selectContact(contact) {
 function clearContactFilter() {
   state.contactId = null;
   state.contactLabel = "All contacts";
+  state.disposition = null;
   state.page = 1;
   updateContactFilterUi();
   loadCalls();
@@ -149,8 +151,11 @@ function clearContactFilter() {
 }
 
 function updateContactFilterUi() {
-  contactFilterLabel.textContent = state.contactId ? `Contact: ${state.contactLabel}` : "All contacts";
-  clearContactBtn.hidden = !state.contactId;
+  const parts = [];
+  parts.push(state.contactId ? `Contact: ${state.contactLabel}` : "All contacts");
+  if (state.disposition) parts.push(`Outcome: ${dispositionLabel(state.disposition)}`);
+  contactFilterLabel.textContent = parts.join(" · ");
+  clearContactBtn.hidden = !state.contactId && !state.disposition;
 }
 
 function transcriptCell(call) {
@@ -176,6 +181,7 @@ function transcriptCell(call) {
 async function loadCalls() {
   const params = new URLSearchParams();
   if (state.contactId) params.set("contactId", state.contactId);
+  if (state.disposition) params.set("disposition", state.disposition);
   if (state.dateFrom) params.set("dateFrom", state.dateFrom);
   if (state.dateTo) params.set("dateTo", state.dateTo);
   if (viewAs) params.set("viewAs", viewAs);
@@ -185,6 +191,15 @@ async function loadCalls() {
   const res = await fetch(`/api/calls?${params.toString()}`);
   const data = await res.json();
   renderCalls(data);
+
+  // Arriving here via a deep link (e.g. from the coverage report) sets
+  // contactId before the contact's actual name/phone is known -- fill it
+  // in from the first matching call once results come back.
+  if (state.contactId && state.contactLabel === "…" && data.calls.length > 0) {
+    const call = data.calls[0];
+    state.contactLabel = call.contactName || call.contactPhone || state.contactId;
+    updateContactFilterUi();
+  }
 }
 
 // GHL's own call disposition, formatted for display ("no-answer" -> "No
@@ -326,10 +341,28 @@ nextPageBtn.addEventListener("click", () => {
   loadCalls();
 });
 
-// Initial view: this week, all contacts.
-const initialRange = presetRange("week");
-state.dateFrom = initialRange.from;
-state.dateTo = initialRange.to;
+// Initial view: this week, all contacts -- unless a deep link (from the
+// coverage report, e.g.) asks for a specific contact or outcome, in which
+// case default to "all time" instead, since the call in question could be
+// from well outside the current week.
+const deepLinkParams = new URLSearchParams(location.search);
+const deepLinkContactId = deepLinkParams.get("contactId");
+const deepLinkDisposition = deepLinkParams.get("disposition");
+
+if (deepLinkContactId || deepLinkDisposition) {
+  if (deepLinkContactId) {
+    state.contactId = deepLinkContactId;
+    state.contactLabel = "…";
+  }
+  if (deepLinkDisposition) state.disposition = deepLinkDisposition;
+  state.dateFrom = "";
+  state.dateTo = "";
+  history.replaceState(null, "", location.pathname);
+} else {
+  const initialRange = presetRange("week");
+  state.dateFrom = initialRange.from;
+  state.dateTo = initialRange.to;
+}
 dateFromInput.value = state.dateFrom;
 dateToInput.value = state.dateTo;
 updateContactFilterUi();

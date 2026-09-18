@@ -179,7 +179,7 @@ const PAGE_SIZES = [20, 50, 100];
 // contacts), dateFrom/dateTo are 'YYYY-MM-DD' strings and inclusive of the
 // whole day on both ends. ghlUserId is the same RBAC scoping used
 // everywhere else (a specific user's calls, or unrestricted for admins).
-async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, page = 1, pageSize = 20 } = {}) {
+async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, disposition, page = 1, pageSize = 20 } = {}) {
   const size = PAGE_SIZES.includes(Number(pageSize)) ? Number(pageSize) : 20;
   const pageNum = Math.max(1, Number(page) || 1);
 
@@ -200,6 +200,10 @@ async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, page = 1, pag
   if (dateTo) {
     params.push(dateTo);
     conditions.push(`c.occurred_at < ($${params.length}::date + interval '1 day')`);
+  }
+  if (disposition) {
+    params.push(disposition);
+    conditions.push(`c.disposition = $${params.length}`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -279,6 +283,23 @@ async function getCoverageByDisposition() {
   return rows;
 }
 
+// Month-by-month coverage among completed calls only -- this is what
+// actually makes a systemic gap (like a GHL-side outage) visible: a steady
+// stored rate that drops to near-zero for a stretch of months, rather than
+// scattered one-off misses.
+async function getCoverageByMonth() {
+  const { rows } = await pool.query(
+    `SELECT to_char(date_trunc('month', occurred_at), 'YYYY-MM') AS month,
+            count(*) FILTER (WHERE disposition = 'completed')::int AS completed,
+            count(*) FILTER (WHERE disposition = 'completed' AND storage_key IS NOT NULL)::int AS stored
+     FROM calls
+     WHERE occurred_at IS NOT NULL
+     GROUP BY 1
+     ORDER BY 1`
+  );
+  return rows;
+}
+
 // The real gaps: completed calls with no recording ever stored, paginated
 // the same way as listCalls().
 async function listCoverageGaps({ page = 1, pageSize = 20 } = {}) {
@@ -292,7 +313,7 @@ async function listCoverageGaps({ page = 1, pageSize = 20 } = {}) {
 
   const { rows } = await pool.query(
     `SELECT c.id, c.direction, c.occurred_at AS "occurredAt", c.recording_status AS "recordingStatus",
-            c.handled_by_name AS "handledByName",
+            c.handled_by_name AS "handledByName", c.ghl_contact_id AS "contactId",
             ct.name AS "contactName", ct.phone AS "contactPhone"
      FROM calls c
      LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
@@ -493,6 +514,7 @@ module.exports = {
   listAllCallsWithRecordings,
   getCoverageSummary,
   getCoverageByDisposition,
+  getCoverageByMonth,
   listCoverageGaps,
   getCall,
   createUser,
