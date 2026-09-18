@@ -179,7 +179,7 @@ const PAGE_SIZES = [20, 50, 100];
 // contacts), dateFrom/dateTo are 'YYYY-MM-DD' strings and inclusive of the
 // whole day on both ends. ghlUserId is the same RBAC scoping used
 // everywhere else (a specific user's calls, or unrestricted for admins).
-async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, disposition, page = 1, pageSize = 20 } = {}) {
+async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, disposition, hasRecording, page = 1, pageSize = 20 } = {}) {
   const size = PAGE_SIZES.includes(Number(pageSize)) ? Number(pageSize) : 20;
   const pageNum = Math.max(1, Number(page) || 1);
 
@@ -204,6 +204,11 @@ async function listCalls({ contactId, ghlUserId, dateFrom, dateTo, disposition, 
   if (disposition) {
     params.push(disposition);
     conditions.push(`c.disposition = $${params.length}`);
+  }
+  if (hasRecording === true) {
+    conditions.push(`c.storage_key IS NOT NULL`);
+  } else if (hasRecording === false) {
+    conditions.push(`c.storage_key IS NULL`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 

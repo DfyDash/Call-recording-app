@@ -36,8 +36,11 @@ function dispositionLabel(disposition) {
   return disposition.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function statTile(label, value) {
-  return `<div class="stat-tile"><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></div>`;
+function statTile(label, value, href) {
+  const tag = href ? "a" : "div";
+  const hrefAttr = href ? ` href="${escapeHtml(href)}"` : "";
+  const className = href ? "stat-tile stat-tile-link" : "stat-tile";
+  return `<${tag} class="${className}"${hrefAttr}><div class="stat-value">${value}</div><div class="stat-label">${escapeHtml(label)}</div></${tag}>`;
 }
 
 async function loadSummary() {
@@ -46,10 +49,10 @@ async function loadSummary() {
 
   const storedPct = summary.total ? Math.round((summary.stored / summary.total) * 100) : 0;
   statGrid.innerHTML =
-    statTile("Total calls", summary.total) +
-    statTile("Recordings stored", `${summary.stored} (${storedPct}%)`) +
-    statTile("Completed calls", summary.completed) +
-    statTile("Completed, no recording found", summary.completedMissing);
+    statTile("Total calls", summary.total, "/?all=1") +
+    statTile("Recordings stored", `${summary.stored} (${storedPct}%)`, "/?hasRecording=true") +
+    statTile("Completed calls", summary.completed, "/?disposition=completed") +
+    statTile("Completed, no recording found", summary.completedMissing, "/?disposition=completed&hasRecording=false");
 
   dispositionRows.innerHTML = "";
   if (byDisposition.length === 0) {

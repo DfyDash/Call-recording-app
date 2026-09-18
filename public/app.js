@@ -23,6 +23,7 @@ const state = {
   contactId: null,
   contactLabel: "All contacts",
   disposition: null,
+  hasRecording: null,
   dateFrom: "",
   dateTo: "",
   page: 1,
@@ -144,6 +145,7 @@ function clearContactFilter() {
   state.contactId = null;
   state.contactLabel = "All contacts";
   state.disposition = null;
+  state.hasRecording = null;
   state.page = 1;
   updateContactFilterUi();
   loadCalls();
@@ -154,8 +156,10 @@ function updateContactFilterUi() {
   const parts = [];
   parts.push(state.contactId ? `Contact: ${state.contactLabel}` : "All contacts");
   if (state.disposition) parts.push(`Outcome: ${dispositionLabel(state.disposition)}`);
+  if (state.hasRecording === true) parts.push("Has recording");
+  if (state.hasRecording === false) parts.push("No recording");
   contactFilterLabel.textContent = parts.join(" · ");
-  clearContactBtn.hidden = !state.contactId && !state.disposition;
+  clearContactBtn.hidden = !state.contactId && !state.disposition && state.hasRecording === null;
 }
 
 function transcriptCell(call) {
@@ -182,6 +186,7 @@ async function loadCalls() {
   const params = new URLSearchParams();
   if (state.contactId) params.set("contactId", state.contactId);
   if (state.disposition) params.set("disposition", state.disposition);
+  if (state.hasRecording !== null) params.set("hasRecording", state.hasRecording);
   if (state.dateFrom) params.set("dateFrom", state.dateFrom);
   if (state.dateTo) params.set("dateTo", state.dateTo);
   if (viewAs) params.set("viewAs", viewAs);
@@ -348,13 +353,16 @@ nextPageBtn.addEventListener("click", () => {
 const deepLinkParams = new URLSearchParams(location.search);
 const deepLinkContactId = deepLinkParams.get("contactId");
 const deepLinkDisposition = deepLinkParams.get("disposition");
+const deepLinkHasRecording = deepLinkParams.get("hasRecording");
+const deepLinkAllTime = deepLinkParams.get("all") !== null;
 
-if (deepLinkContactId || deepLinkDisposition) {
+if (deepLinkContactId || deepLinkDisposition || deepLinkHasRecording !== null || deepLinkAllTime) {
   if (deepLinkContactId) {
     state.contactId = deepLinkContactId;
     state.contactLabel = "…";
   }
   if (deepLinkDisposition) state.disposition = deepLinkDisposition;
+  if (deepLinkHasRecording !== null) state.hasRecording = deepLinkHasRecording === "true";
   state.dateFrom = "";
   state.dateTo = "";
   history.replaceState(null, "", location.pathname);

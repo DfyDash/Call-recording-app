@@ -480,6 +480,18 @@ audio {
   border-radius: 8px;
 }
 
+.stat-tile-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.stat-tile-link:hover {
+  border-color: var(--muted);
+  background: rgba(0, 0, 0, 0.03);
+}
+
 .stat-value {
   font-size: 1.5rem;
   font-weight: 600;
