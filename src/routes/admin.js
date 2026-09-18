@@ -179,6 +179,20 @@ router.post("/backfill", requireCsrf, async (req, res) => {
   res.status(202).json(backfillState);
 });
 
+// "Call Recording Coverage" -- storage health at a glance: how many calls
+// have a recording captured vs. not, broken down by GHL's own disposition,
+// plus the list of genuine gaps (completed calls with no recording -- as
+// opposed to no-answer/busy/voicemail, which were never going to have one).
+router.get("/coverage", async (req, res) => {
+  const [summary, byDisposition] = await Promise.all([db.getCoverageSummary(), db.getCoverageByDisposition()]);
+  res.json({ summary, byDisposition });
+});
+
+router.get("/coverage/gaps", async (req, res) => {
+  const result = await db.listCoverageGaps({ page: req.query.page, pageSize: req.query.pageSize });
+  res.json(result);
+});
+
 router.get("/audit-log", async (req, res) => {
   const result = await db.listAuditLog({ page: req.query.page, pageSize: req.query.pageSize });
   res.json(result);

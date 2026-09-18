@@ -250,6 +250,60 @@ async function listAllCallsWithRecordings({ dateFrom, dateTo } = {}) {
   return rows;
 }
 
+// Coverage summary for the admin "Call Recording Coverage" report --
+// total calls, how many actually have a recording stored, and how many
+// completed calls (the ones that should have a recording) are missing
+// one. A call GHL disposed as anything other than "completed" (no
+// answer, busy, voicemail...) was never going to have a recording, so
+// it's not counted as a gap.
+async function getCoverageSummary() {
+  const { rows } = await pool.query(
+    `SELECT
+       count(*)::int AS total,
+       count(*) FILTER (WHERE disposition = 'completed')::int AS completed,
+       count(*) FILTER (WHERE storage_key IS NOT NULL)::int AS stored,
+       count(*) FILTER (WHERE disposition = 'completed' AND storage_key IS NULL)::int AS "completedMissing"
+     FROM calls`
+  );
+  return rows[0];
+}
+
+async function getCoverageByDisposition() {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(disposition, '(unknown)') AS disposition, count(*)::int AS count,
+            count(*) FILTER (WHERE storage_key IS NOT NULL)::int AS stored
+     FROM calls
+     GROUP BY disposition
+     ORDER BY count DESC`
+  );
+  return rows;
+}
+
+// The real gaps: completed calls with no recording ever stored, paginated
+// the same way as listCalls().
+async function listCoverageGaps({ page = 1, pageSize = 20 } = {}) {
+  const size = PAGE_SIZES.includes(Number(pageSize)) ? Number(pageSize) : 20;
+  const pageNum = Math.max(1, Number(page) || 1);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) FROM calls c WHERE c.disposition = 'completed' AND c.storage_key IS NULL`
+  );
+  const total = Number(countRows[0].count);
+
+  const { rows } = await pool.query(
+    `SELECT c.id, c.direction, c.occurred_at AS "occurredAt", c.recording_status AS "recordingStatus",
+            c.handled_by_name AS "handledByName",
+            ct.name AS "contactName", ct.phone AS "contactPhone"
+     FROM calls c
+     LEFT JOIN contacts ct ON ct.ghl_contact_id = c.ghl_contact_id
+     WHERE c.disposition = 'completed' AND c.storage_key IS NULL
+     ORDER BY c.occurred_at DESC NULLS LAST
+     LIMIT $1 OFFSET $2`,
+    [size, (pageNum - 1) * size]
+  );
+  return { gaps: rows, total, page: pageNum, pageSize: size };
+}
+
 async function getCall(callId) {
   const { rows } = await pool.query(
     `SELECT c.id, c.storage_key AS "storageKey", c.recording_status AS "recordingStatus",
@@ -437,6 +491,9 @@ module.exports = {
   listContacts,
   listCalls,
   listAllCallsWithRecordings,
+  getCoverageSummary,
+  getCoverageByDisposition,
+  listCoverageGaps,
   getCall,
   createUser,
   getUserByUsername,

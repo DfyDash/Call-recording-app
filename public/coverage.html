@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Call Recording Coverage — CallTrove</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="admin-page">
+    <div id="session-bar" class="session-bar"></div>
+    <h1>Call recording coverage</h1>
+    <p><a href="/">&larr; Back to dashboard</a> · <a href="/admin.html">Manage users</a> · <a href="/phi-access-log.html">Access log</a></p>
+    <p class="settings-note">
+      How much of your call history actually has a recording captured, and
+      where the real gaps are. A call GHL disposed as anything other than
+      "Completed" (no answer, busy, voicemail...) was never going to have a
+      recording to begin with, so those aren't counted as gaps below.
+    </p>
+
+    <div class="stat-grid" id="stat-grid"></div>
+
+    <h2>By outcome</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Outcome</th>
+          <th>Calls</th>
+          <th>Recorded</th>
+        </tr>
+      </thead>
+      <tbody id="disposition-rows"></tbody>
+    </table>
+
+    <h2>Completed calls missing a recording</h2>
+    <p class="settings-note">
+      These are the real gaps -- GHL marked the call as completed, but no
+      recording was ever captured for it.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Contact</th>
+          <th>Date/Time</th>
+          <th>Direction</th>
+          <th>Handled by</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="gap-rows"></tbody>
+    </table>
+    <div class="pagination">
+      <button type="button" id="gap-prev-btn">&larr; Prev</button>
+      <span id="gap-page-indicator"></span>
+      <button type="button" id="gap-next-btn">Next &rarr;</button>
+    </div>
+  </div>
+  <script src="coverage.js"></script>
+</body>
+</html>

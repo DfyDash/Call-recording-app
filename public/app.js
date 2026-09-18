@@ -71,7 +71,7 @@ async function loadSession() {
   const me = await res.json();
   transcriptionEnabled = !!me.transcriptionEnabled;
   csrfToken = me.csrfToken || "";
-  const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a>` : "";
+  const adminLink = me.role === "admin" ? ` · <a href="/admin.html">Manage users</a> · <a href="/coverage.html">Recording coverage</a>` : "";
   sessionBar.innerHTML = `<span>${escapeHtml(me.username)} (${escapeHtml(me.role)})${adminLink} · <a href="/account.html">Change password</a></span>
     <form method="POST" action="/auth/logout"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Log out</button></form>`;
 
