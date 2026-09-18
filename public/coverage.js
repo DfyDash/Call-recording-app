@@ -49,7 +49,7 @@ async function loadSummary() {
     statTile("Total calls", summary.total) +
     statTile("Recordings stored", `${summary.stored} (${storedPct}%)`) +
     statTile("Completed calls", summary.completed) +
-    statTile("Completed, missing recording", summary.completedMissing);
+    statTile("Completed, no recording found", summary.completedMissing);
 
   dispositionRows.innerHTML = "";
   if (byDisposition.length === 0) {
@@ -269,7 +269,7 @@ function showChartTooltip(e, m, missing, i, bandW, storedH) {
   const missingSpan = document.createElement("span");
   missingSpan.className = "tooltip-value";
   missingSpan.textContent = String(missing);
-  valueLine.append(storedSpan, " stored · ", missingSpan, " missing");
+  valueLine.append(storedSpan, " stored · ", missingSpan, " no recording found");
   chartTooltip.append(monthLine, valueLine);
 }
 
